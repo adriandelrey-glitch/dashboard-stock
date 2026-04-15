@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard de Reposición de Stock</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #F5F4F0;
+    --surface: #FFFFFF;
+    --surface2: #EFEFEB;
+    --border: rgba(0,0,0,0.08);
+    --border-strong: rgba(0,0,0,0.15);
+    --text: #1A1A18;
+    --text-muted: #6B6B67;
+    --text-faint: #9B9B96;
+    --red: #C13030;
+    --red-bg: #FDF0F0;
+    --red-border: #F5BFBF;
+    --yellow: #9A5E00;
+    --yellow-bg: #FDF6E8;
+    --yellow-border: #F5DFA0;
+    --green: #2A7A3B;
+    --green-bg: #EDF7F0;
+    --green-border: #A8DFB8;
+    --blue: #1A5FA8;
+    --blue-bg: #EBF3FD;
+    --accent: #2B5CE6;
+    --radius: 10px;
+    --radius-sm: 6px;
+  }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .layout {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem;
+  }
+
+  /* Header */
+  .header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+  .header-left h1 {
+    font-size: 26px;
+    font-weight: 600;
+    letter-spacing: -0.5px;
+    color: var(--text);
+  }
+  .header-left p {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-top: 3px;
+  }
+  .header-right {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .last-update {
+    font-size: 12px;
+    color: var(--text-faint);
+    font-family: 'DM Mono', monospace;
+  }
+  .btn {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 8px 16px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-strong);
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .btn:hover { background: var(--surface2); }
+  .btn:active { transform: scale(0.98); }
+  .btn-primary {
+    background: var(--accent);
+    color: white;
+    border-color: transparent;
+  }
+  .btn-primary:hover { background: #1E4BC9; }
+
+  /* Scorecards */
+  .scorecards {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+    margin-bottom: 1.5rem;
+  }
+  @media (max-width: 900px) { .scorecards { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 500px) { .scorecards { grid-template-columns: repeat(2, 1fr); } }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem 1.25rem;
+  }
+  .card-label {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    margin-bottom: 8px;
+  }
+  .card-value {
+    font-size: 32px;
+    font-weight: 600;
+    letter-spacing: -1px;
+    color: var(--text);
+    line-height: 1;
+  }
+  .card-sub {
+    font-size: 11px;
+    color: var(--text-faint);
+    margin-top: 4px;
+  }
+  .card.red { border-left: 3px solid var(--red); }
+  .card.red .card-value { color: var(--red); }
+  .card.yellow { border-left: 3px solid #D4860A; }
+  .card.yellow .card-value { color: var(--yellow); }
+  .card.green { border-left: 3px solid var(--green); }
+  .card.green .card-value { color: var(--green); }
+
+  /* Filters */
+  .filter-bar {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.875rem 1.25rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 1.25rem;
+  }
+  .filter-bar label {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    white-space: nowrap;
+  }
+  .filter-bar select,
+  .filter-bar input {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-strong);
+    background: var(--bg);
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .filter-bar input { min-width: 180px; }
+  .filter-bar select:focus,
+  .filter-bar input:focus { border-color: var(--accent); }
+  .filter-divider {
+    width: 1px;
+    height: 20px;
+    background: var(--border);
+    margin: 0 4px;
+  }
+
+  /* Section header */
+  .section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+  }
+  .section-title {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+  }
+  .count-pill {
+    font-size: 11px;
+    font-weight: 500;
+    font-family: 'DM Mono', monospace;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    padding: 2px 10px;
+    border-radius: 100px;
+  }
+
+  /* Table */
+  .table-container {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-bottom: 1.5rem;
+  }
+  .table-scroll { overflow-x: auto; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    min-width: 900px;
+  }
+  thead th {
+    background: var(--surface2);
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.15s;
+  }
+  thead th:hover { color: var(--text); }
+  thead th.active { color: var(--accent); }
+  tbody tr {
+    border-bottom: 1px solid var(--border);
+    transition: background 0.1s;
+  }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: #FAFAF8; }
+  tbody td {
+    padding: 10px 14px;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 180px;
+  }
+  td.mono {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  td.num {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    text-align: right;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 100px;
+    white-space: nowrap;
+    letter-spacing: 0.2px;
+  }
+  .badge::before { content: ''; width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+  .badge-red { background: var(--red-bg); color: var(--red); border: 1px solid var(--red-border); }
+  .badge-red::before { background: var(--red); }
+  .badge-yellow { background: var(--yellow-bg); color: var(--yellow); border: 1px solid var(--yellow-border); }
+  .badge-yellow::before { background: #D4860A; }
+  .badge-green { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-border); }
+  .badge-green::before { background: var(--green); }
+  .badge-gray { background: var(--surface2); color: var(--text-muted); border: 1px solid var(--border); }
+  .badge-gray::before { background: var(--text-faint); }
+
+  .dias-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .dias-track {
+    width: 48px;
+    height: 4px;
+    background: var(--surface2);
+    border-radius: 2px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .dias-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.3s;
+  }
+
+  .loading-state, .error-state, .empty-state {
+    text-align: center;
+    padding: 3rem 2rem;
+    color: var(--text-muted);
+    font-size: 14px;
+  }
+  .loading-state .spinner {
+    width: 24px; height: 24px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    margin: 0 auto 1rem;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .error-state { color: var(--red); }
+
+  /* Chart */
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    margin-bottom: 1.5rem;
+  }
+  .chart-card .section-head { margin-bottom: 1rem; }
+
+  /* Pagination */
+  .pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text-muted);
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .pagination-btns { display: flex; gap: 6px; }
+  .page-btn {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    padding: 4px 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  .page-btn:hover:not(:disabled) { background: var(--surface2); }
+  .page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .page-btn.active { background: var(--accent); color: white; border-color: transparent; }
+</style>
+</head>
+<body>
+<div class="layout">
+
+  <div class="header">
+    <div class="header-left">
+      <h1>Reposicion de Stock</h1>
+      <p id="last-update">Conectando con Google Sheets...</p>
+    </div>
+    <div class="header-right">
+      <span class="last-update" id="update-time"></span>
+      <button class="btn" onclick="loadData()">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M13.6 2.4A7 7 0 1 0 15 8h-1.5A5.5 5.5 0 1 1 8 2.5c1.5 0 2.9.6 3.9 1.6L10 6h5V1l-1.4 1.4z" fill="currentColor"/></svg>
+        Actualizar
+      </button>
+    </div>
+  </div>
+
+  <div class="scorecards">
+    <div class="card red">
+      <div class="card-label">Reponer ya</div>
+      <div class="card-value" id="sc-red">—</div>
+      <div class="card-sub">referencias urgentes</div>
+    </div>
+    <div class="card yellow">
+      <div class="card-label">Reponer pronto</div>
+      <div class="card-value" id="sc-yellow">—</div>
+      <div class="card-sub">referencias en alerta</div>
+    </div>
+    <div class="card green">
+      <div class="card-label">OK</div>
+      <div class="card-value" id="sc-green">—</div>
+      <div class="card-sub">referencias con stock</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Sin ventas</div>
+      <div class="card-value" id="sc-gray">—</div>
+      <div class="card-sub">sin historico</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Total</div>
+      <div class="card-value" id="sc-total">—</div>
+      <div class="card-sub">referencias totales</div>
+    </div>
+  </div>
+
+  <div class="filter-bar">
+    <label>Buscar</label>
+    <input type="text" id="f-search" placeholder="SKU o producto..." oninput="applyFilters()">
+    <div class="filter-divider"></div>
+    <label>Estado</label>
+    <select id="f-estado" onchange="applyFilters()"><option value="">Todos</option></select>
+    <label>Proveedor</label>
+    <select id="f-proveedor" onchange="applyFilters()"><option value="">Todos</option></select>
+    <label>Deporte</label>
+    <select id="f-deporte" onchange="applyFilters()"><option value="">Todos</option></select>
+    <label>Coleccion</label>
+    <select id="f-coleccion" onchange="applyFilters()"><option value="">Todas</option></select>
+    <button class="btn" onclick="resetFilters()" style="margin-left:auto">Limpiar filtros</button>
+  </div>
+
+  <div class="section-head">
+    <span class="section-title">Tabla de reposicion</span>
+    <span class="count-pill" id="count-label">0 referencias</span>
+  </div>
+  <div class="table-container">
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th onclick="sortBy('sku')" id="th-sku">SKU</th>
+            <th onclick="sortBy('nombre')" id="th-nombre">Producto</th>
+            <th onclick="sortBy('talla')" id="th-talla">Talla</th>
+            <th onclick="sortBy('proveedor')" id="th-proveedor">Proveedor</th>
+            <th onclick="sortBy('stock')" id="th-stock" style="text-align:right">Stock</th>
+            <th onclick="sortBy('dias')" id="th-dias" style="text-align:right">Dias stock</th>
+            <th onclick="sortBy('reorden')" id="th-reorden" style="text-align:right">Pto. reorden</th>
+            <th onclick="sortBy('futuro')" id="th-futuro" style="text-align:right">Stock futuro</th>
+            <th onclick="sortBy('venta')" id="th-venta" style="text-align:right">Venta/mes</th>
+            <th onclick="sortBy('estado')" id="th-estado">Estado</th>
+          </tr>
+        </thead>
+        <tbody id="tabla-body">
+          <tr><td colspan="10"><div class="loading-state"><div class="spinner"></div>Cargando datos desde Google Sheets...</div></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="pagination">
+      <span id="page-info">—</span>
+      <div class="pagination-btns" id="page-btns"></div>
+    </div>
+  </div>
+
+  <div class="chart-card">
+    <div class="section-head">
+      <span class="section-title">Top 20 productos por venta media mensual</span>
+    </div>
+    <div style="position: relative;" id="chart-container">
+      <canvas id="chartVentas" role="img" aria-label="Grafico de barras horizontales con los 20 productos mas vendidos"></canvas>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRn0mBkI1BpilbrsGU-kBrsCu25nmG1v-08IrE9O1rp0Gac_6FtzlCGOZ2mhFY6GuP9jSQZVNxcY767/pub?gid=0&single=true&output=csv';
+
+let allData = [], filtered = [];
+let sortCol = 'dias', sortAsc = true;
+let chartInstance = null;
+let currentPage = 1;
+const PAGE_SIZE = 50;
+
+function parseCSV(text) {
+  const lines = text.split('\n');
+  const headers = lines[0].split(',').map(h => h.trim().replace(/"/g,''));
+  return lines.slice(1).filter(l => l.trim()).map(line => {
+    const vals = [];
+    let cur = '', inQ = false;
+    for (let c of line) {
+      if (c === '"') inQ = !inQ;
+      else if (c === ',' && !inQ) { vals.push(cur.trim()); cur = ''; }
+      else cur += c;
+    }
+    vals.push(cur.trim());
+    const obj = {};
+    headers.forEach((h, i) => obj[h] = (vals[i] || '').replace(/"/g,''));
+    return obj;
+  });
+}
+
+function mapRow(raw) {
+  const keys = Object.keys(raw);
+  const get = (idx) => (raw[keys[idx]] || '').replace(/"/g,'').trim();
+  return {
+    sku: get(2), nombre: get(3), talla: get(4), proveedor: get(6),
+    stock: parseFloat(get(11)) || 0,
+    venta: parseFloat(get(16)) || 0,
+    leadtime: parseFloat(get(19)) || 0,
+    reorden: parseFloat(get(21)) || 0,
+    dias: parseFloat(get(22)) || 0,
+    futuro: parseFloat(get(23)) || 0,
+    estado: get(24) || '',
+    deporte: get(12) || '',
+    coleccion: get(13) || ''
+  };
+}
+
+function estadoClass(estado) {
+  if (estado.includes('Reponer ya')) return 'badge-red';
+  if (estado.includes('Reponer pronto')) return 'badge-yellow';
+  if (estado.includes('OK')) return 'badge-green';
+  return 'badge-gray';
+}
+
+function diasColor(dias) {
+  if (dias <= 15) return '#C13030';
+  if (dias <= 45) return '#D4860A';
+  return '#2A7A3B';
+}
+
+function diasWidth(dias) {
+  if (dias >= 999) return 100;
+  return Math.min(100, (dias / 90) * 100);
+}
+
+function populateFilter(id, values) {
+  const sel = document.getElementById(id);
+  const cur = sel.value;
+  while (sel.options.length > 1) sel.remove(1);
+  [...new Set(values)].filter(Boolean).sort().forEach(v => {
+    const o = document.createElement('option');
+    o.value = v; o.textContent = v; sel.appendChild(o);
+  });
+  if (cur) sel.value = cur;
+}
+
+function updateScores(data) {
+  document.getElementById('sc-red').textContent = data.filter(d => d.estado.includes('Reponer ya')).length;
+  document.getElementById('sc-yellow').textContent = data.filter(d => d.estado.includes('Reponer pronto')).length;
+  document.getElementById('sc-green').textContent = data.filter(d => d.estado.includes('OK')).length;
+  document.getElementById('sc-gray').textContent = data.filter(d => d.estado.includes('Sin ventas')).length;
+  document.getElementById('sc-total').textContent = data.length;
+}
+
+function renderTable(data) {
+  document.getElementById('count-label').textContent = `${data.length} referencias`;
+  const tbody = document.getElementById('tabla-body');
+  if (!data.length) {
+    tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state">No hay resultados con los filtros aplicados</div></td></tr>';
+    document.getElementById('page-info').textContent = '—';
+    document.getElementById('page-btns').innerHTML = '';
+    return;
+  }
+  const totalPages = Math.ceil(data.length / PAGE_SIZE);
+  if (currentPage > totalPages) currentPage = 1;
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const page = data.slice(start, start + PAGE_SIZE);
+
+  tbody.innerHTML = page.map(r => {
+    const dDisplay = r.dias >= 999 ? '—' : Math.round(r.dias);
+    const dColor = r.dias >= 999 ? '#9B9B96' : diasColor(r.dias);
+    const dW = diasWidth(r.dias);
+    return `<tr>
+      <td class="mono">${r.sku}</td>
+      <td title="${r.nombre}" style="max-width:180px">${r.nombre}</td>
+      <td>${r.talla}</td>
+      <td title="${r.proveedor}" style="max-width:110px;overflow:hidden;text-overflow:ellipsis">${r.proveedor}</td>
+      <td class="num">${Math.round(r.stock)}</td>
+      <td class="num">
+        <div class="dias-bar" style="justify-content:flex-end">
+          <span style="color:${dColor};font-family:'DM Mono',monospace;font-size:12px">${dDisplay}</span>
+          <div class="dias-track"><div class="dias-fill" style="width:${dW}%;background:${dColor}"></div></div>
+        </div>
+      </td>
+      <td class="num">${Math.round(r.reorden)}</td>
+      <td class="num">${Math.round(r.futuro)}</td>
+      <td class="num">${r.venta.toFixed(1)}</td>
+      <td><span class="badge ${estadoClass(r.estado)}">${r.estado}</span></td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('page-info').textContent = `${start+1}–${Math.min(start+PAGE_SIZE, data.length)} de ${data.length}`;
+  const btns = document.getElementById('page-btns');
+  btns.innerHTML = `
+    <button class="page-btn" onclick="goPage(${currentPage-1})" ${currentPage===1?'disabled':''}>&#8592;</button>
+    ${Array.from({length: Math.min(totalPages,7)}, (_,i) => {
+      const p = i+1;
+      return `<button class="page-btn ${p===currentPage?'active':''}" onclick="goPage(${p})">${p}</button>`;
+    }).join('')}
+    ${totalPages > 7 ? `<span style="color:var(--text-faint);padding:0 4px">...</span><button class="page-btn ${totalPages===currentPage?'active':''}" onclick="goPage(${totalPages})">${totalPages}</button>` : ''}
+    <button class="page-btn" onclick="goPage(${currentPage+1})" ${currentPage===totalPages?'disabled':''}>&#8594;</button>
+  `;
+}
+
+function goPage(p) {
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  if (p < 1 || p > totalPages) return;
+  currentPage = p;
+  renderTable(filtered);
+}
+
+function renderChart(data) {
+  const ventas = {};
+  data.forEach(r => {
+    if (!ventas[r.nombre]) ventas[r.nombre] = 0;
+    ventas[r.nombre] += r.venta;
+  });
+  const sorted = Object.entries(ventas).sort((a,b) => b[1]-a[1]).slice(0,20);
+  const labels = sorted.map(e => e[0]);
+  const values = sorted.map(e => parseFloat(e[1].toFixed(1)));
+  const h = Math.max(300, labels.length * 36 + 60);
+  document.getElementById('chart-container').style.height = h + 'px';
+  if (chartInstance) chartInstance.destroy();
+  chartInstance = new Chart(document.getElementById('chartVentas'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Venta media mensual (uds)',
+        data: values,
+        backgroundColor: '#2B5CE6',
+        borderRadius: 4,
+        borderSkipped: false
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.parsed.x.toFixed(1)} uds/mes` } }
+      },
+      scales: {
+        x: { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { font: { family: 'DM Mono', size: 11 } } },
+        y: { grid: { display: false }, ticks: { font: { family: 'DM Sans', size: 12 } } }
+      }
+    }
+  });
+}
+
+function applyFilters() {
+  currentPage = 1;
+  const search = document.getElementById('f-search').value.toLowerCase();
+  const estado = document.getElementById('f-estado').value;
+  const proveedor = document.getElementById('f-proveedor').value;
+  const deporte = document.getElementById('f-deporte').value;
+  const coleccion = document.getElementById('f-coleccion').value;
+  filtered = allData.filter(r => {
+    if (search && !r.sku.toLowerCase().includes(search) && !r.nombre.toLowerCase().includes(search)) return false;
+    if (estado && r.estado !== estado) return false;
+    if (proveedor && !r.proveedor.includes(proveedor)) return false;
+    if (deporte && r.deporte !== deporte) return false;
+    if (coleccion && r.coleccion !== coleccion) return false;
+    return true;
+  });
+  applySortAndRender();
+}
+
+function resetFilters() {
+  document.getElementById('f-search').value = '';
+  ['f-estado','f-proveedor','f-deporte','f-coleccion'].forEach(id => document.getElementById(id).value = '');
+  applyFilters();
+}
+
+function sortBy(col) {
+  if (sortCol === col) sortAsc = !sortAsc;
+  else { sortCol = col; sortAsc = true; }
+  document.querySelectorAll('thead th').forEach(th => th.classList.remove('active'));
+  const th = document.getElementById('th-' + col);
+  if (th) th.classList.add('active');
+  applySortAndRender();
+}
+
+function applySortAndRender() {
+  const numCols = ['stock','dias','reorden','futuro','venta','leadtime'];
+  filtered.sort((a, b) => {
+    let va = a[sortCol], vb = b[sortCol];
+    if (numCols.includes(sortCol)) { va = parseFloat(va)||0; vb = parseFloat(vb)||0; }
+    if (va < vb) return sortAsc ? -1 : 1;
+    if (va > vb) return sortAsc ? 1 : -1;
+    return 0;
+  });
+  renderTable(filtered);
+}
+
+async function loadData() {
+  document.getElementById('last-update').textContent = 'Actualizando...';
+  document.getElementById('tabla-body').innerHTML = '<tr><td colspan="10"><div class="loading-state"><div class="spinner"></div>Cargando datos desde Google Sheets...</div></td></tr>';
+  try {
+    const res = await fetch(CSV_URL + '&t=' + Date.now());
+    if (!res.ok) throw new Error('Error HTTP ' + res.status);
+    const text = await res.text();
+    const rows = parseCSV(text);
+    allData = rows.map(mapRow).filter(r => r.sku);
+    updateScores(allData);
+    populateFilter('f-estado', allData.map(r => r.estado));
+    populateFilter('f-proveedor', allData.flatMap(r => r.proveedor.split(',').map(p => p.trim())));
+    populateFilter('f-deporte', allData.map(r => r.deporte));
+    populateFilter('f-coleccion', allData.map(r => r.coleccion));
+    filtered = [...allData];
+    sortBy('dias');
+    renderChart(allData);
+    const now = new Date();
+    document.getElementById('last-update').textContent = `${allData.length} referencias cargadas`;
+    document.getElementById('update-time').textContent = `Actualizado: ${now.toLocaleTimeString('es-ES')}`;
+    document.getElementById('th-dias').classList.add('active');
+  } catch(e) {
+    document.getElementById('last-update').textContent = 'Error al cargar los datos';
+    document.getElementById('tabla-body').innerHTML = `<tr><td colspan="10"><div class="error-state">No se pudo conectar con Google Sheets.<br>Comprueba que la hoja esta publicada correctamente e intentalo de nuevo.</div></td></tr>`;
+  }
+}
+
+loadData();
+</script>
+</body>
+</html>

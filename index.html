@@ -6,6 +6,8 @@
 <title>Dashboard de Reposición de Stock</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
@@ -15,24 +17,37 @@
     --red: #C13030; --red-bg: #FDF0F0; --red-border: #F5BFBF;
     --yellow: #9A5E00; --yellow-bg: #FDF6E8; --yellow-border: #F5DFA0;
     --green: #2A7A3B; --green-bg: #EDF7F0; --green-border: #A8DFB8;
+    --blue: #1A5FA8; --blue-bg: #EBF3FD; --blue-border: #B5D4F4;
     --accent: #2B5CE6; --radius: 10px; --radius-sm: 6px;
   }
   body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; line-height: 1.5; }
   .layout { max-width: 1400px; margin: 0 auto; padding: 2rem 1.5rem; }
 
-  .header { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem; }
+  /* Header */
+  .header { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem; }
   .header-left h1 { font-size: 26px; font-weight: 600; letter-spacing: -0.5px; }
   .header-left p { font-size: 13px; color: var(--text-muted); margin-top: 3px; }
   .header-right { display: flex; gap: 8px; align-items: center; }
   .last-update { font-size: 12px; color: var(--text-faint); font-family: 'DM Mono', monospace; }
 
+  /* Tabs */
+  .tabs { display: flex; gap: 4px; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border); }
+  .tab-btn { font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500; padding: 10px 20px; border: none; background: transparent; color: var(--text-muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all 0.15s; }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* Buttons */
   .btn { font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500; padding: 8px 16px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; transition: background 0.15s, transform 0.1s; display: inline-flex; align-items: center; gap: 6px; }
   .btn:hover { background: var(--surface2); }
   .btn:active { transform: scale(0.98); }
   .btn-primary { background: var(--accent); color: white; border-color: transparent; }
   .btn-primary:hover { background: #1E4BC9; }
   .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+  .btn-sm { font-size: 11px; padding: 4px 10px; }
 
+  /* Scorecards */
   .scorecards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 1.5rem; }
   @media (max-width: 900px) { .scorecards { grid-template-columns: repeat(3, 1fr); } }
   .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.25rem; }
@@ -46,6 +61,7 @@
   .card.green { border-left: 3px solid var(--green); }
   .card.green .card-value { color: var(--green); }
 
+  /* Filters */
   .filter-bar { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.875rem 1.25rem; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 1.25rem; }
   .filter-bar label { font-size: 11px; font-weight: 500; letter-spacing: 0.4px; text-transform: uppercase; color: var(--text-faint); white-space: nowrap; }
   .filter-bar select, .filter-bar input[type="text"] { font-family: 'DM Sans', sans-serif; font-size: 13px; padding: 6px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--bg); color: var(--text); outline: none; transition: border-color 0.15s; }
@@ -53,13 +69,15 @@
   .filter-bar select:focus, .filter-bar input[type="text"]:focus { border-color: var(--accent); }
   .filter-divider { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
 
+  /* Section */
   .section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 8px; }
   .section-title { font-size: 13px; font-weight: 600; letter-spacing: 0.3px; color: var(--text-muted); text-transform: uppercase; }
   .count-pill { font-size: 11px; font-weight: 500; font-family: 'DM Mono', monospace; background: var(--surface2); border: 1px solid var(--border); color: var(--text-muted); padding: 2px 10px; border-radius: 100px; }
 
+  /* Table */
   .table-container { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 1.5rem; }
   .table-scroll { overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 1050px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 900px; }
   thead th { background: var(--surface2); padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 600; letter-spacing: 0.4px; text-transform: uppercase; color: var(--text-faint); border-bottom: 1px solid var(--border); white-space: nowrap; cursor: pointer; user-select: none; transition: color 0.15s; }
   thead th:hover { color: var(--text); }
   thead th.active { color: var(--accent); }
@@ -68,7 +86,7 @@
   tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; }
   tbody tr:last-child { border-bottom: none; }
   tbody tr:hover { background: #FAFAF8; }
-  tbody td { padding: 8px 14px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
+  tbody td { padding: 9px 14px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
   td.mono { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--text-muted); }
   td.num { font-family: 'DM Mono', monospace; font-size: 12px; text-align: right; }
 
@@ -76,7 +94,7 @@
   .qty-input:focus { border-color: var(--accent); background: white; }
   .qty-input.has-value { border-color: var(--accent); background: #EBF3FD; color: var(--accent); font-weight: 500; }
 
-  .badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 100px; white-space: nowrap; letter-spacing: 0.2px; }
+  .badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 100px; white-space: nowrap; }
   .badge::before { content: ''; width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
   .badge-red { background: var(--red-bg); color: var(--red); border: 1px solid var(--red-border); }
   .badge-red::before { background: var(--red); }
@@ -84,6 +102,8 @@
   .badge-yellow::before { background: #D4860A; }
   .badge-green { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-border); }
   .badge-green::before { background: var(--green); }
+  .badge-blue { background: var(--blue-bg); color: var(--blue); border: 1px solid var(--blue-border); }
+  .badge-blue::before { background: var(--blue); }
   .badge-gray { background: var(--surface2); color: var(--text-muted); border: 1px solid var(--border); }
   .badge-gray::before { background: var(--text-faint); }
 
@@ -96,30 +116,6 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   .error-state { color: var(--red); }
 
-  /* Orden de compra */
-  .oc-section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 1.5rem; overflow: hidden; }
-  .oc-header { padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; background: var(--surface2); }
-  .oc-header-left { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-  .oc-title { font-size: 13px; font-weight: 600; letter-spacing: 0.3px; color: var(--text-muted); text-transform: uppercase; }
-  .oc-tabs { display: flex; gap: 6px; }
-  .oc-tab { font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 500; padding: 5px 14px; border-radius: 100px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text-muted); cursor: pointer; transition: all 0.15s; }
-  .oc-tab:hover { background: var(--bg); }
-  .oc-tab.active { background: var(--accent); color: white; border-color: transparent; }
-  .oc-body { padding: 1.25rem; }
-  .oc-empty { text-align: center; padding: 2rem; color: var(--text-faint); font-size: 13px; }
-  .oc-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  .oc-table th { padding: 8px 12px; text-align: left; font-size: 11px; font-weight: 600; letter-spacing: 0.4px; text-transform: uppercase; color: var(--text-faint); border-bottom: 1px solid var(--border); white-space: nowrap; }
-  .oc-table td { padding: 9px 12px; border-bottom: 1px solid var(--border); }
-  .oc-table tr:last-child td { border-bottom: none; }
-  .oc-footer { padding: 1rem 1.25rem; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
-  .oc-total { font-size: 13px; color: var(--text-muted); }
-  .oc-total strong { color: var(--text); font-weight: 600; font-family: 'DM Mono', monospace; font-size: 15px; }
-  .oc-actions { display: flex; gap: 8px; align-items: center; }
-  .oc-status { font-size: 13px; padding: 6px 14px; border-radius: var(--radius-sm); font-weight: 500; }
-  .oc-status.sending { color: var(--accent); background: #EBF3FD; }
-  .oc-status.ok { color: var(--green); background: var(--green-bg); }
-  .oc-status.error { color: var(--red); background: var(--red-bg); }
-
   .chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; margin-bottom: 1.5rem; }
 
   .pagination { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-muted); flex-wrap: wrap; gap: 8px; }
@@ -129,7 +125,55 @@
   .page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
   .page-btn.active { background: var(--accent); color: white; border-color: transparent; }
 
+  /* OC panel */
+  .oc-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 1.5rem; overflow: hidden; }
+  .oc-panel-header { padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; background: var(--surface2); }
+  .oc-panel-title { font-size: 13px; font-weight: 600; letter-spacing: 0.3px; color: var(--text-muted); text-transform: uppercase; }
+  .oc-prov-tabs { display: flex; gap: 6px; }
+  .oc-tab { font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 500; padding: 5px 14px; border-radius: 100px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text-muted); cursor: pointer; transition: all 0.15s; }
+  .oc-tab:hover { background: var(--bg); }
+  .oc-tab.active { background: var(--accent); color: white; border-color: transparent; }
+  .oc-panel-body { padding: 1.25rem; }
+  .oc-panel-footer { padding: 1rem 1.25rem; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+  .oc-total { font-size: 13px; color: var(--text-muted); }
+  .oc-total strong { color: var(--text); font-weight: 600; font-family: 'DM Mono', monospace; font-size: 15px; }
+  .oc-actions { display: flex; gap: 8px; align-items: center; }
+  .oc-status { font-size: 13px; padding: 6px 14px; border-radius: var(--radius-sm); font-weight: 500; }
+  .oc-status.sending { color: var(--accent); background: #EBF3FD; }
+  .oc-status.ok { color: var(--green); background: var(--green-bg); }
+  .oc-status.error { color: var(--red); background: var(--red-bg); }
   .oc-hint { font-size: 12px; color: var(--text-faint); font-style: italic; }
+  .oc-empty { text-align: center; padding: 2rem; color: var(--text-faint); font-size: 13px; }
+
+  /* PO number input */
+  .po-input-wrap { display: flex; align-items: center; gap: 8px; }
+  .po-input-wrap label { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+  .po-input { font-family: 'DM Mono', monospace; font-size: 13px; font-weight: 500; width: 110px; padding: 6px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--bg); color: var(--accent); outline: none; }
+  .po-input:focus { border-color: var(--accent); background: white; }
+
+  /* OC list */
+  .oc-list { display: flex; flex-direction: column; gap: 12px; }
+  .oc-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .oc-card-header { padding: 0.875rem 1.25rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; cursor: pointer; transition: background 0.1s; }
+  .oc-card-header:hover { background: var(--surface2); }
+  .oc-card-info { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .oc-card-numero { font-family: 'DM Mono', monospace; font-size: 13px; font-weight: 500; color: var(--accent); }
+  .oc-card-meta { font-size: 12px; color: var(--text-muted); }
+  .oc-card-body { border-top: 1px solid var(--border); padding: 1rem 1.25rem; display: none; }
+  .oc-card-body.open { display: block; }
+  .oc-lineas-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .oc-lineas-table th { padding: 7px 10px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; color: var(--text-faint); border-bottom: 1px solid var(--border); text-align: left; }
+  .oc-lineas-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  .oc-lineas-table tr:last-child td { border-bottom: none; }
+  .recibida-input { font-family: 'DM Mono', monospace; font-size: 12px; width: 64px; padding: 4px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--bg); color: var(--text); text-align: center; outline: none; }
+  .recibida-input:focus { border-color: var(--green); background: white; }
+  .progreso-bar { width: 60px; height: 5px; background: var(--surface2); border-radius: 3px; overflow: hidden; display: inline-block; vertical-align: middle; margin-left: 6px; }
+  .progreso-fill { height: 100%; border-radius: 3px; background: var(--green); }
+
+  /* OC filter */
+  .oc-filter-bar { display: flex; gap: 10px; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; }
+  .oc-filter-bar select { font-family: 'DM Sans', sans-serif; font-size: 13px; padding: 6px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--bg); color: var(--text); outline: none; }
+  .oc-filter-bar label { font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-faint); }
 </style>
 </head>
 <body>
@@ -149,112 +193,194 @@
     </div>
   </div>
 
-  <div class="scorecards">
-    <div class="card red"><div class="card-label">Reponer ya</div><div class="card-value" id="sc-red">—</div><div class="card-sub">referencias urgentes</div></div>
-    <div class="card yellow"><div class="card-label">Reponer pronto</div><div class="card-value" id="sc-yellow">—</div><div class="card-sub">referencias en alerta</div></div>
-    <div class="card green"><div class="card-label">OK</div><div class="card-value" id="sc-green">—</div><div class="card-sub">referencias con stock</div></div>
-    <div class="card"><div class="card-label">Sin ventas</div><div class="card-value" id="sc-gray">—</div><div class="card-sub">sin historico</div></div>
-    <div class="card"><div class="card-label">Total</div><div class="card-value" id="sc-total">—</div><div class="card-sub">referencias totales</div></div>
+  <!-- TABS -->
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('stock')">Stock</button>
+    <button class="tab-btn" onclick="switchTab('ordenes')">Ordenes de compra <span id="oc-badge" style="display:none;background:var(--accent);color:white;font-size:10px;padding:1px 6px;border-radius:100px;margin-left:4px"></span></button>
   </div>
 
-  <div class="filter-bar">
-    <label>Buscar</label>
-    <input type="text" id="f-search" placeholder="SKU o producto..." oninput="applyFilters()">
-    <div class="filter-divider"></div>
-    <label>Estado</label>
-    <select id="f-estado" onchange="applyFilters()"><option value="">Todos</option></select>
-    <label>Proveedor</label>
-    <select id="f-proveedor" onchange="applyFilters()"><option value="">Todos</option></select>
-    <label>Deporte</label>
-    <select id="f-deporte" onchange="applyFilters()"><option value="">Todos</option></select>
-    <label>Coleccion</label>
-    <select id="f-coleccion" onchange="applyFilters()"><option value="">Todas</option></select>
-    <button class="btn" onclick="resetFilters()" style="margin-left:auto">Limpiar filtros</button>
-  </div>
+  <!-- TAB STOCK -->
+  <div class="tab-content active" id="tab-stock">
 
-  <div class="section-head">
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <span class="section-title">Tabla de reposicion</span>
-      <span class="count-pill" id="count-label">0 referencias</span>
-      <span class="oc-hint" id="qty-hint"></span>
+    <div class="scorecards">
+      <div class="card red"><div class="card-label">Reponer ya</div><div class="card-value" id="sc-red">—</div><div class="card-sub">referencias urgentes</div></div>
+      <div class="card yellow"><div class="card-label">Reponer pronto</div><div class="card-value" id="sc-yellow">—</div><div class="card-sub">referencias en alerta</div></div>
+      <div class="card green"><div class="card-label">OK</div><div class="card-value" id="sc-green">—</div><div class="card-sub">referencias con stock</div></div>
+      <div class="card"><div class="card-label">Sin ventas</div><div class="card-value" id="sc-gray">—</div><div class="card-sub">sin historico</div></div>
+      <div class="card"><div class="card-label">Total</div><div class="card-value" id="sc-total">—</div><div class="card-sub">referencias totales</div></div>
     </div>
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-      <span class="oc-hint">Proveedor del pedido:</span>
-      <div class="oc-tabs">
-        <button class="oc-tab active" onclick="selectProveedor('RAR')">RAR</button>
-        <button class="oc-tab" onclick="selectProveedor('SANCAR')">SANCAR</button>
+
+    <div class="filter-bar">
+      <label>Buscar</label>
+      <input type="text" id="f-search" placeholder="SKU o producto..." oninput="applyFilters()">
+      <div class="filter-divider"></div>
+      <label>Estado</label>
+      <select id="f-estado" onchange="applyFilters()"><option value="">Todos</option></select>
+      <label>Proveedor</label>
+      <select id="f-proveedor" onchange="applyFilters()"><option value="">Todos</option></select>
+      <label>Deporte</label>
+      <select id="f-deporte" onchange="applyFilters()"><option value="">Todos</option></select>
+      <label>Coleccion</label>
+      <select id="f-coleccion" onchange="applyFilters()"><option value="">Todas</option></select>
+      <button class="btn" onclick="resetFilters()" style="margin-left:auto">Limpiar filtros</button>
+    </div>
+
+    <div class="section-head">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span class="section-title">Tabla de reposicion</span>
+        <span class="count-pill" id="count-label">0 referencias</span>
+        <span class="oc-hint" id="qty-hint"></span>
       </div>
-      <button class="btn btn-primary" id="btn-crear-orden" onclick="abrirResumen()" disabled>
-        <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M2 2l12 6-12 6V9.5l8-1.5-8-1.5V2z" fill="currentColor"/></svg>
-        Crear orden en Shopify
-      </button>
-    </div>
-  </div>
-
-  <div class="table-container">
-    <div class="table-scroll">
-      <table>
-        <thead>
-          <tr>
-            <th onclick="sortBy('sku')" id="th-sku">SKU</th>
-            <th onclick="sortBy('nombre')" id="th-nombre">Producto</th>
-            <th onclick="sortBy('talla')" id="th-talla">Talla</th>
-            <th onclick="sortBy('proveedor')" id="th-proveedor">Proveedor</th>
-            <th onclick="sortBy('stock')" id="th-stock" style="text-align:right">Stock</th>
-            <th onclick="sortBy('dias')" id="th-dias" style="text-align:right">Dias stock</th>
-            <th onclick="sortBy('reorden')" id="th-reorden" style="text-align:right">Pto. reorden</th>
-            <th onclick="sortBy('futuro')" id="th-futuro" style="text-align:right">Stock futuro</th>
-            <th onclick="sortBy('venta')" id="th-venta" style="text-align:right">Venta/mes</th>
-            <th class="no-sort" style="text-align:center">Cantidad pedido</th>
-            <th onclick="sortBy('estado')" id="th-estado">Estado</th>
-          </tr>
-        </thead>
-        <tbody id="tabla-body">
-          <tr><td colspan="11"><div class="loading-state"><div class="spinner"></div>Cargando datos desde Google Sheets...</div></td></tr>
-        </tbody>
-      </table>
-    </div>
-    <div class="pagination">
-      <span id="page-info">—</span>
-      <div class="pagination-btns" id="page-btns"></div>
-    </div>
-  </div>
-
-  <!-- Resumen orden -->
-  <div class="oc-section" id="oc-resumen" style="display:none">
-    <div class="oc-header">
-      <div class="oc-header-left">
-        <span class="oc-title">Resumen orden — <span id="oc-prov-label"></span></span>
-      </div>
-      <span id="oc-status" class="oc-status" style="display:none"></span>
-    </div>
-    <div class="oc-body" id="oc-body"></div>
-    <div class="oc-footer">
-      <div class="oc-total">
-        Lineas: <strong id="oc-total-lineas">0</strong>
-        &nbsp;&nbsp;
-        Total unidades: <strong id="oc-total-uds">0</strong>
-      </div>
-      <div class="oc-actions">
-        <button class="btn" onclick="cerrarResumen()">Cancelar</button>
-        <button class="btn btn-primary" id="btn-confirmar" onclick="enviarOrden()">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span class="oc-hint">Proveedor:</span>
+        <div class="oc-prov-tabs">
+          <button class="oc-tab active" onclick="selectProveedor('RAR')">RAR</button>
+          <button class="oc-tab" onclick="selectProveedor('SANCAR')">SANCAR</button>
+        </div>
+        <button class="btn btn-primary" id="btn-crear-orden" onclick="abrirResumen()" disabled>
           <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M2 2l12 6-12 6V9.5l8-1.5-8-1.5V2z" fill="currentColor"/></svg>
-          Confirmar y enviar a Shopify
+          Ver resumen del pedido
         </button>
       </div>
     </div>
+
+    <div class="table-container">
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th onclick="sortBy('sku')" id="th-sku">SKU</th>
+              <th onclick="sortBy('nombre')" id="th-nombre">Producto</th>
+              <th onclick="sortBy('talla')" id="th-talla">Talla</th>
+              <th onclick="sortBy('proveedor')" id="th-proveedor">Proveedor</th>
+              <th onclick="sortBy('stock')" id="th-stock" style="text-align:right">Stock</th>
+              <th onclick="sortBy('dias')" id="th-dias" style="text-align:right">Dias stock</th>
+              <th onclick="sortBy('reorden')" id="th-reorden" style="text-align:right">Pto. reorden</th>
+              <th onclick="sortBy('futuro')" id="th-futuro" style="text-align:right">Stock futuro</th>
+              <th onclick="sortBy('venta')" id="th-venta" style="text-align:right">Venta/mes</th>
+              <th class="no-sort" style="text-align:center">Cantidad pedido</th>
+              <th onclick="sortBy('estado')" id="th-estado">Estado</th>
+            </tr>
+          </thead>
+          <tbody id="tabla-body">
+            <tr><td colspan="11"><div class="loading-state"><div class="spinner"></div>Cargando datos...</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="pagination">
+        <span id="page-info">—</span>
+        <div class="pagination-btns" id="page-btns"></div>
+      </div>
+    </div>
+
+    <!-- Resumen pedido -->
+    <div class="oc-panel" id="oc-resumen" style="display:none">
+      <div class="oc-panel-header">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <span class="oc-panel-title">Resumen — <span id="oc-prov-label"></span></span>
+          <div class="po-input-wrap">
+            <label>Numero orden:</label>
+            <input type="text" class="po-input" id="po-number" value="">
+          </div>
+        </div>
+        <span id="oc-status" class="oc-status" style="display:none"></span>
+      </div>
+      <div class="oc-panel-body" id="oc-body"></div>
+      <div class="oc-panel-footer">
+        <div class="oc-total">
+          Lineas: <strong id="oc-total-lineas">0</strong>
+          &nbsp;&nbsp;
+          Total unidades: <strong id="oc-total-uds">0</strong>
+        </div>
+        <div class="oc-actions">
+          <button class="btn" onclick="cerrarResumen()">Cancelar</button>
+          <button class="btn" onclick="generarPDF()">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M4 1h6l4 4v10H4V1zm6 0v4h4M7 9h4M7 12h4M5 9h1M5 12h1" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>
+            Descargar PDF
+          </button>
+          <button class="btn btn-primary" id="btn-confirmar" onclick="confirmarOrden()">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M2 8l4 4 8-8" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+            Guardar orden
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="chart-card">
+      <div class="section-head"><span class="section-title">Top 20 productos por venta media mensual</span></div>
+      <div style="position:relative;" id="chart-container">
+        <canvas id="chartVentas" role="img" aria-label="Top 20 productos por venta media mensual"></canvas>
+      </div>
+    </div>
+
   </div>
 
-  <div class="chart-card">
+  <!-- TAB ORDENES -->
+  <div class="tab-content" id="tab-ordenes">
+
+    <div class="scorecards" style="grid-template-columns:repeat(5,1fr);margin-bottom:1.5rem">
+      <div class="card blue" style="border-left:3px solid var(--blue)">
+        <div class="card-label">Sin recibir</div>
+        <div class="card-value" id="oc-sc-pendiente" style="color:var(--blue)">—</div>
+        <div class="card-sub">ordenes pendientes</div>
+      </div>
+      <div class="card yellow">
+        <div class="card-label">Recibido parcial</div>
+        <div class="card-value" id="oc-sc-parcial">—</div>
+        <div class="card-sub">ordenes incompletas</div>
+      </div>
+      <div class="card green">
+        <div class="card-label">Cerradas</div>
+        <div class="card-value" id="oc-sc-cerradas">—</div>
+        <div class="card-sub">ordenes recibidas</div>
+      </div>
+      <div class="card" style="border-left:3px solid #6B6B67">
+        <div class="card-label">Uds por recibir RAR</div>
+        <div class="card-value" id="oc-sc-uds-rar" style="font-size:24px">—</div>
+        <div class="card-sub">unidades pendientes</div>
+      </div>
+      <div class="card" style="border-left:3px solid #9B9B96">
+        <div class="card-label">Uds por recibir SANCAR</div>
+        <div class="card-value" id="oc-sc-uds-sancar" style="font-size:24px">—</div>
+        <div class="card-sub">unidades pendientes</div>
+      </div>
+    </div>
+
     <div class="section-head">
-      <span class="section-title">Top 20 productos por venta media mensual</span>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span class="section-title">Ordenes de compra</span>
+        <span class="count-pill" id="oc-count-label">0 ordenes</span>
+      </div>
+      <button class="btn" onclick="loadOrdenes()">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M13.6 2.4A7 7 0 1 0 15 8h-1.5A5.5 5.5 0 1 1 8 2.5c1.5 0 2.9.6 3.9 1.6L10 6h5V1l-1.4 1.4z" fill="currentColor"/></svg>
+        Actualizar
+      </button>
     </div>
-    <div style="position: relative;" id="chart-container">
-      <canvas id="chartVentas" role="img" aria-label="Grafico de barras horizontales con los 20 productos mas vendidos"></canvas>
+
+    <div class="oc-filter-bar">
+      <label>Estado</label>
+      <select id="oc-f-estado" onchange="renderOrdenes()">
+        <option value="">Todos</option>
+        <option value="Pendiente">Pendiente</option>
+        <option value="Recibido parcial">Recibido parcial</option>
+        <option value="Recibido">Recibido</option>
+      </select>
+      <label>Proveedor</label>
+      <select id="oc-f-proveedor" onchange="renderOrdenes()">
+        <option value="">Todos</option>
+        <option value="RAR">RAR</option>
+        <option value="SANCAR">SANCAR</option>
+      </select>
     </div>
+
+    <div id="oc-list-container">
+      <div class="loading-state"><div class="spinner"></div>Cargando ordenes...</div>
+    </div>
+
   </div>
 
 </div>
+
 <script>
 const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRn0mBkI1BpilbrsGU-kBrsCu25nmG1v-08IrE9O1rp0Gac_6FtzlCGOZ2mhFY6GuP9jSQZVNxcY767/pub?gid=0&single=true&output=csv';
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzEUgCY-K5SWvlLFlhHaQnxMPTDI1QUX9A7O8xbWkqqsf4g_OTBt0p8Dh7T7ePqXaiz/exec';
@@ -267,6 +393,21 @@ const PAGE_SIZE = 50;
 let ocProveedor = 'RAR';
 const cantidades = {};
 
+// pendientes del dashboard: { sku|talla: cantidad }
+let pendientesOC = {};
+
+let allOrdenes = [];
+let allLineasOC = [];
+
+// ── TABS ──────────────────────────────────────────────────────
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach((b,i) => b.classList.toggle('active', ['stock','ordenes'][i] === tab));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  if (tab === 'ordenes') loadOrdenes();
+}
+
+// ── CSV ───────────────────────────────────────────────────────
 function parseCSV(text) {
   const lines = text.split('\n');
   const headers = lines[0].split(',').map(h => h.trim().replace(/"/g,''));
@@ -297,13 +438,19 @@ function mapRow(raw) {
     leadtime: parseFloat(get(19)) || 0,
     reorden: parseFloat(get(21)) || 0,
     dias: parseFloat(get(22)) || 0,
-    futuro: parseFloat(get(23)) || 0,
+    futuroSheets: parseFloat(get(23)) || 0,
     estado: get(24) || ''
   };
 }
 
 function rowKey(r) { return r.sku + '|' + r.talla; }
 
+function stockFuturo(r) {
+  const pendiente = pendientesOC[rowKey(r)] || 0;
+  return r.futuroSheets + pendiente;
+}
+
+// ── FILTERS ───────────────────────────────────────────────────
 function estadoClass(e) {
   if (e.includes('Reponer ya')) return 'badge-red';
   if (e.includes('Reponer pronto')) return 'badge-yellow';
@@ -315,6 +462,12 @@ function diasColor(d) {
   if (d <= 15) return '#C13030';
   if (d <= 45) return '#D4860A';
   return '#2A7A3B';
+}
+
+function estadoOCClass(e) {
+  if (e === 'Recibido') return 'badge-green';
+  if (e === 'Recibido parcial') return 'badge-yellow';
+  return 'badge-blue';
 }
 
 function populateFilter(id, values) {
@@ -336,6 +489,19 @@ function updateScores(data) {
   document.getElementById('sc-total').textContent = data.length;
 }
 
+// ── PENDIENTES OC ─────────────────────────────────────────────
+function calcularPendientesOC() {
+  pendientesOC = {};
+  allLineasOC.forEach(l => {
+    const orden = allOrdenes.find(o => o.numero === l.numero);
+    if (!orden || orden.estado === 'Recibido') return;
+    const pendiente = Math.max(0, (parseInt(l.cantidadPedida) || 0) - (parseInt(l.cantidadRecibida) || 0));
+    const key = l.sku + '|' + l.talla;
+    pendientesOC[key] = (pendientesOC[key] || 0) + pendiente;
+  });
+}
+
+// ── TABLA STOCK ───────────────────────────────────────────────
 function updateOrdenBtn() {
   const lineas = getLineasActuales();
   const btn = document.getElementById('btn-crear-orden');
@@ -364,7 +530,7 @@ function renderTable(data) {
   document.getElementById('count-label').textContent = `${data.length} referencias`;
   const tbody = document.getElementById('tabla-body');
   if (!data.length) {
-    tbody.innerHTML = '<tr><td colspan="11"><div class="empty-state">No hay resultados con los filtros aplicados</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11"><div class="empty-state">No hay resultados</div></td></tr>';
     document.getElementById('page-info').textContent = '—';
     document.getElementById('page-btns').innerHTML = '';
     return;
@@ -380,7 +546,8 @@ function renderTable(data) {
     const dColor = r.dias >= 999 ? '#9B9B96' : diasColor(r.dias);
     const dW = r.dias >= 999 ? 100 : Math.min(100, (r.dias / 90) * 100);
     const qty = cantidades[key] || '';
-    const hasVal = qty > 0;
+    const futuro = stockFuturo(r);
+    const pendiente = pendientesOC[key] || 0;
     const esProveedor = r.proveedor.includes(ocProveedor);
     return `<tr>
       <td class="mono">${r.sku}</td>
@@ -393,11 +560,13 @@ function renderTable(data) {
         <div class="dias-track"><div class="dias-fill" style="width:${dW}%;background:${dColor}"></div></div>
       </div></td>
       <td class="num">${Math.round(r.reorden)}</td>
-      <td class="num">${Math.round(r.futuro)}</td>
+      <td class="num" title="${pendiente > 0 ? pendiente + ' uds pendientes de OC' : ''}" style="${pendiente>0?'color:var(--accent);font-weight:500':''}">
+        ${Math.round(futuro)}${pendiente>0?'<span style="font-size:10px;color:var(--accent);margin-left:3px">▲'+pendiente+'</span>':''}
+      </td>
       <td class="num">${r.venta.toFixed(1)}</td>
       <td style="text-align:center">
         ${esProveedor
-          ? `<input type="number" class="qty-input ${hasVal?'has-value':''}" data-key="${key}" value="${qty}" min="0" placeholder="0" oninput="onQtyChange('${key}', this.value)">`
+          ? `<input type="number" class="qty-input ${qty>0?'has-value':''}" data-key="${key}" value="${qty}" min="0" placeholder="0" oninput="onQtyChange('${key}', this.value)">`
           : `<span style="color:var(--text-faint);font-size:11px">—</span>`
         }
       </td>
@@ -423,39 +592,52 @@ function goPage(p) {
 
 function selectProveedor(prov) {
   ocProveedor = prov;
-  document.querySelectorAll('.oc-tab').forEach(t => t.classList.toggle('active', t.textContent === prov));
+  document.querySelectorAll('.oc-prov-tabs .oc-tab').forEach(t => t.classList.toggle('active', t.textContent === prov));
   cerrarResumen();
   currentPage = 1;
   applySortAndRender();
   updateOrdenBtn();
 }
 
-function abrirResumen() {
+// ── RESUMEN PEDIDO ────────────────────────────────────────────
+async function abrirResumen() {
   const lineas = getLineasActuales();
   if (!lineas.length) return;
+
+  // Obtener próximo número
+  try {
+    const res = await fetch(`${SCRIPT_URL}?tipo=ultimo_numero`);
+    const data = await res.json();
+    if (data.ok) document.getElementById('po-number').value = data.numero;
+  } catch(e) {
+    document.getElementById('po-number').value = 'PO_0001';
+  }
+
   document.getElementById('oc-resumen').style.display = 'block';
   document.getElementById('oc-prov-label').textContent = ocProveedor;
   document.getElementById('oc-total-lineas').textContent = lineas.length;
   document.getElementById('oc-total-uds').textContent = lineas.reduce((s,r) => s + r.cantidad, 0);
   document.getElementById('oc-status').style.display = 'none';
-  document.getElementById('oc-body').innerHTML = `<div style="overflow-x:auto"><table class="oc-table">
+
+  document.getElementById('oc-body').innerHTML = `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">
     <thead><tr>
-      <th>SKU</th><th>Producto</th><th>Talla</th>
-      <th style="text-align:right">Cantidad</th>
-      <th style="text-align:right">Stock actual</th>
-      <th style="text-align:right">Dias stock</th>
-      <th>Estado</th>
+      <th style="padding:8px 12px;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);border-bottom:1px solid var(--border);text-align:left">SKU</th>
+      <th style="padding:8px 12px;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);border-bottom:1px solid var(--border);text-align:left">Producto</th>
+      <th style="padding:8px 12px;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);border-bottom:1px solid var(--border);text-align:left">Talla</th>
+      <th style="padding:8px 12px;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);border-bottom:1px solid var(--border);text-align:right">Cantidad</th>
+      <th style="padding:8px 12px;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);border-bottom:1px solid var(--border);text-align:right">Stock actual</th>
+      <th style="padding:8px 12px;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);border-bottom:1px solid var(--border);text-align:left">Estado</th>
     </tr></thead>
-    <tbody>${lineas.map(r=>`<tr>
-      <td class="mono">${r.sku}</td>
-      <td>${r.nombre}</td>
-      <td>${r.talla}</td>
-      <td class="num" style="color:var(--accent);font-weight:600">${r.cantidad}</td>
-      <td class="num">${Math.round(r.stock)}</td>
-      <td class="num">${r.dias>=999?'—':Math.round(r.dias)}</td>
-      <td><span class="badge ${estadoClass(r.estado)}">${r.estado}</span></td>
+    <tbody>${lineas.map(r=>`<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:8px 12px;font-family:'DM Mono',monospace;font-size:12px;color:var(--text-muted)">${r.sku}</td>
+      <td style="padding:8px 12px">${r.nombre}</td>
+      <td style="padding:8px 12px">${r.talla}</td>
+      <td style="padding:8px 12px;text-align:right;font-family:'DM Mono',monospace;color:var(--accent);font-weight:600">${r.cantidad}</td>
+      <td style="padding:8px 12px;text-align:right;font-family:'DM Mono',monospace;font-size:12px">${Math.round(r.stock)}</td>
+      <td style="padding:8px 12px"><span class="badge ${estadoClass(r.estado)}">${r.estado}</span></td>
     </tr>`).join('')}
     </tbody></table></div>`;
+
   document.getElementById('oc-resumen').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
@@ -463,39 +645,38 @@ function cerrarResumen() {
   document.getElementById('oc-resumen').style.display = 'none';
 }
 
-async function enviarOrden() {
+async function confirmarOrden() {
   const lineas = getLineasActuales();
   if (!lineas.length) return;
+  const numero = document.getElementById('po-number').value.trim();
+  if (!numero) { showOCStatus('Introduce un numero de orden', 'error'); return; }
   const fecha = new Date().toISOString().slice(0,10);
   const payload = {
-    tipo: 'orden_shopify',
-    proveedor: ocProveedor,
-    fecha,
+    tipo: 'crear_oc',
+    numero, proveedor: ocProveedor, fecha,
     lineas: lineas.map(r => ({ sku: r.sku, nombre: r.nombre, talla: r.talla, cantidad: r.cantidad }))
   };
-  const btnConfirmar = document.getElementById('btn-confirmar');
-  btnConfirmar.disabled = true;
-  showOCStatus('Buscando variantes y creando orden en Shopify...', 'sending');
+  document.getElementById('btn-confirmar').disabled = true;
+  showOCStatus('Guardando orden...', 'sending');
   try {
     const res = await fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify(payload) });
     const data = await res.json();
     if (data.ok) {
-      let msg = 'Orden creada correctamente en Shopify';
-      if (data.skusNoEncontrados && data.skusNoEncontrados.length) {
-        msg += `. SKUs no encontrados: ${data.skusNoEncontrados.join(', ')}`;
-      }
-      showOCStatus(msg, 'ok');
-      // Limpiar cantidades del proveedor enviado
+      showOCStatus(`Orden ${data.numero} guardada correctamente`, 'ok');
       lineas.forEach(r => delete cantidades[rowKey(r)]);
       applySortAndRender();
       updateOrdenBtn();
+      // Actualizar pendientes
+      await loadOrdenesSilencioso();
+      calcularPendientesOC();
+      applySortAndRender();
     } else {
       showOCStatus('Error: ' + (data.error || 'desconocido'), 'error');
     }
   } catch(e) {
-    showOCStatus('Error de conexion con el script', 'error');
+    showOCStatus('Error de conexion', 'error');
   }
-  btnConfirmar.disabled = false;
+  document.getElementById('btn-confirmar').disabled = false;
 }
 
 function showOCStatus(msg, type) {
@@ -503,6 +684,225 @@ function showOCStatus(msg, type) {
   el.textContent = msg; el.className = 'oc-status ' + type; el.style.display = 'inline-block';
 }
 
+// ── PDF ───────────────────────────────────────────────────────
+function generarPDF() {
+  const lineas = getLineasActuales();
+  if (!lineas.length) return;
+  const numero = document.getElementById('po-number').value.trim() || 'PO_XXXX';
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  const fecha = new Date().toLocaleDateString('es-ES');
+  const totalUds = lineas.reduce((s, r) => s + r.cantidad, 0);
+
+  doc.setFontSize(20); doc.setFont('helvetica', 'bold'); doc.setTextColor(43, 92, 230);
+  doc.text('ORDEN DE COMPRA', 14, 22);
+  doc.setFontSize(13); doc.setFont('helvetica', 'normal'); doc.setTextColor(100,100,100);
+  doc.text(numero, 14, 30);
+
+  doc.setFontSize(10); doc.setTextColor(50,50,50);
+  doc.text('Proveedor:', 14, 44); doc.setFont('helvetica','bold'); doc.text(ocProveedor, 45, 44);
+  doc.setFont('helvetica','normal'); doc.text('Fecha:', 120, 44); doc.setFont('helvetica','bold'); doc.text(fecha, 140, 44);
+  doc.setFont('helvetica','normal'); doc.text('Total lineas:', 14, 52); doc.setFont('helvetica','bold'); doc.text(String(lineas.length), 45, 52);
+  doc.setFont('helvetica','normal'); doc.text('Total unidades:', 120, 52); doc.setFont('helvetica','bold'); doc.text(String(totalUds), 160, 52);
+
+  doc.setDrawColor(220,220,220); doc.line(14, 58, 196, 58);
+
+  doc.autoTable({
+    startY: 64,
+    head: [['SKU', 'Producto', 'Talla', 'Cantidad']],
+    body: lineas.map(r => [r.sku, r.nombre, r.talla, r.cantidad]),
+    headStyles: { fillColor: [43,92,230], textColor: 255, fontStyle: 'bold', fontSize: 9 },
+    bodyStyles: { fontSize: 9, textColor: [50,50,50] },
+    alternateRowStyles: { fillColor: [248,248,246] },
+    columnStyles: { 0:{cellWidth:35}, 1:{cellWidth:90}, 2:{cellWidth:25}, 3:{cellWidth:25,halign:'center',fontStyle:'bold'} },
+    margin: { left: 14, right: 14 },
+    didDrawPage: (d) => { doc.setFontSize(8); doc.setTextColor(180,180,180); doc.text(`Pagina ${d.pageNumber}`, 196, 290, {align:'right'}); }
+  });
+
+  const finalY = doc.lastAutoTable.finalY + 10;
+  doc.setFontSize(9); doc.setTextColor(150,150,150);
+  doc.text('Generado desde Dashboard de Reposicion de Stock', 14, finalY);
+  doc.save(`${numero}_${ocProveedor}_${fecha.replace(/\//g,'-')}.pdf`);
+}
+
+// ── ORDENES DE COMPRA ─────────────────────────────────────────
+async function loadOrdenesSilencioso() {
+  try {
+    const res = await fetch(`${SCRIPT_URL}?tipo=get_ordenes`);
+    const data = await res.json();
+    if (data.ok) {
+      allOrdenes = data.ordenes || [];
+      allLineasOC = data.lineas || [];
+    }
+  } catch(e) {}
+}
+
+async function loadOrdenes() {
+  document.getElementById('oc-list-container').innerHTML = '<div class="loading-state"><div class="spinner"></div>Cargando ordenes...</div>';
+  try {
+    const res = await fetch(`${SCRIPT_URL}?tipo=get_ordenes`);
+    const data = await res.json();
+    if (data.ok) {
+      allOrdenes = data.ordenes || [];
+      allLineasOC = data.lineas || [];
+      calcularPendientesOC();
+      renderOrdenes();
+      updateOCBadge();
+      updateOCScorecards();
+    } else {
+      document.getElementById('oc-list-container').innerHTML = '<div class="error-state">Error al cargar ordenes</div>';
+    }
+  } catch(e) {
+    document.getElementById('oc-list-container').innerHTML = '<div class="error-state">Error de conexion</div>';
+  }
+}
+
+function updateOCScorecards() {
+  const pendiente = allOrdenes.filter(o => o.estado === 'Pendiente').length;
+  const parcial = allOrdenes.filter(o => o.estado === 'Recibido parcial').length;
+  const cerradas = allOrdenes.filter(o => o.estado === 'Recibido').length;
+
+  let udsRar = 0, udsSancar = 0;
+  allOrdenes.forEach(o => {
+    if (o.estado === 'Recibido') return;
+    const lineas = allLineasOC.filter(l => l.numero === o.numero);
+    const pendUds = lineas.reduce((s,l) => s + Math.max(0, (parseInt(l.cantidadPedida)||0) - (parseInt(l.cantidadRecibida)||0)), 0);
+    if (o.proveedor === 'RAR') udsRar += pendUds;
+    else if (o.proveedor === 'SANCAR') udsSancar += pendUds;
+  });
+
+  document.getElementById('oc-sc-pendiente').textContent = pendiente;
+  document.getElementById('oc-sc-parcial').textContent = parcial;
+  document.getElementById('oc-sc-cerradas').textContent = cerradas;
+  document.getElementById('oc-sc-uds-rar').textContent = udsRar.toLocaleString('es-ES');
+  document.getElementById('oc-sc-uds-sancar').textContent = udsSancar.toLocaleString('es-ES');
+}
+
+function updateOCBadge() {
+  const pendientes = allOrdenes.filter(o => o.estado !== 'Recibido').length;
+  const badge = document.getElementById('oc-badge');
+  if (pendientes > 0) { badge.textContent = pendientes; badge.style.display = 'inline'; }
+  else badge.style.display = 'none';
+}
+
+function renderOrdenes() {
+  const fEstado = document.getElementById('oc-f-estado').value;
+  const fProv = document.getElementById('oc-f-proveedor').value;
+  let ordenes = allOrdenes.filter(o => {
+    if (fEstado && o.estado !== fEstado) return false;
+    if (fProv && o.proveedor !== fProv) return false;
+    return true;
+  }).sort((a,b) => String(b.numero).localeCompare(String(a.numero)));
+
+  updateOCScorecards();
+  document.getElementById('oc-count-label').textContent = `${ordenes.length} ordenes`;
+
+  if (!ordenes.length) {
+    document.getElementById('oc-list-container').innerHTML = '<div class="empty-state">No hay ordenes de compra</div>';
+    return;
+  }
+
+  const html = ordenes.map(o => {
+    const lineas = allLineasOC.filter(l => l.numero === o.numero);
+    const totalPedido = lineas.reduce((s,l) => s + (parseInt(l.cantidadPedida)||0), 0);
+    const totalRecibido = lineas.reduce((s,l) => s + (parseInt(l.cantidadRecibida)||0), 0);
+    const progreso = totalPedido > 0 ? Math.round((totalRecibido / totalPedido) * 100) : 0;
+
+    return `<div class="oc-card">
+      <div class="oc-card-header" onclick="toggleOC('${o.numero}')">
+        <div class="oc-card-info">
+          <span class="oc-card-numero">${o.numero}</span>
+          <span class="oc-card-meta">${o.proveedor}</span>
+          <span class="oc-card-meta">${o.fecha}</span>
+          <span class="oc-card-meta">${lineas.length} lineas · ${totalPedido} uds pedidas · ${totalRecibido} recibidas</span>
+          <div class="progreso-bar"><div class="progreso-fill" style="width:${progreso}%"></div></div>
+          <span style="font-size:11px;color:var(--text-faint)">${progreso}%</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="badge ${estadoOCClass(o.estado)}">${o.estado}</span>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="color:var(--text-faint)"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5"/></svg>
+        </div>
+      </div>
+      <div class="oc-card-body" id="oc-body-${o.numero}">
+        <table class="oc-lineas-table">
+          <thead><tr>
+            <th>SKU</th><th>Producto</th><th>Talla</th>
+            <th style="text-align:right">Pedido</th>
+            <th style="text-align:center">Recibido</th>
+            <th style="text-align:right">Pendiente</th>
+            <th></th>
+          </tr></thead>
+          <tbody>${lineas.map(l => {
+            const pedida = parseInt(l.cantidadPedida) || 0;
+            const recibida = parseInt(l.cantidadRecibida) || 0;
+            const pendiente = Math.max(0, pedida - recibida);
+            const completo = recibida >= pedida;
+            return `<tr>
+              <td class="mono">${l.sku}</td>
+              <td>${l.nombre}</td>
+              <td>${l.talla}</td>
+              <td class="num">${pedida}</td>
+              <td style="text-align:center">
+                <input type="number" class="recibida-input" id="rec-${o.numero}-${l.sku}-${l.talla}" value="${recibida}" min="0" max="${pedida}" ${completo?'style="color:var(--green)"':''}>
+              </td>
+              <td class="num" style="color:${pendiente>0?'var(--yellow)':'var(--green)'}">${pendiente}</td>
+              <td></td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:1rem">
+          <button class="btn btn-sm" onclick="marcarTodoRecibido('${o.numero}')">Marcar todo recibido</button>
+          <button class="btn btn-sm btn-primary" onclick="guardarRecepcion('${o.numero}')">Guardar recepcion</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('oc-list-container').innerHTML = `<div class="oc-list">${html}</div>`;
+}
+
+function toggleOC(numero) {
+  const body = document.getElementById(`oc-body-${numero}`);
+  body.classList.toggle('open');
+}
+
+function marcarTodoRecibido(numero) {
+  const lineas = allLineasOC.filter(l => l.numero === numero);
+  lineas.forEach(l => {
+    const input = document.getElementById(`rec-${numero}-${l.sku}-${l.talla}`);
+    if (input) input.value = l.cantidadPedida;
+  });
+}
+
+async function guardarRecepcion(numero) {
+  const lineas = allLineasOC.filter(l => l.numero === numero);
+  const recepciones = lineas.map(l => {
+    const input = document.getElementById(`rec-${numero}-${l.sku}-${l.talla}`);
+    return {
+      numero,
+      sku: l.sku,
+      talla: l.talla,
+      cantidadRecibida: parseInt(input?.value) || 0
+    };
+  });
+
+  try {
+    const res = await fetch(SCRIPT_URL, {
+      method: 'POST',
+      body: JSON.stringify({ tipo: 'recepcion', numero, recepciones })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      await loadOrdenes();
+      calcularPendientesOC();
+      applySortAndRender();
+    }
+  } catch(e) {
+    alert('Error al guardar la recepcion');
+  }
+}
+
+// ── CHART ─────────────────────────────────────────────────────
 function renderChart(data) {
   const ventas = {};
   data.forEach(r => { if (!ventas[r.nombre]) ventas[r.nombre]=0; ventas[r.nombre]+=r.venta; });
@@ -524,6 +924,7 @@ function renderChart(data) {
   });
 }
 
+// ── FILTERS ───────────────────────────────────────────────────
 function applyFilters() {
   currentPage = 1;
   const search = document.getElementById('f-search').value.toLowerCase();
@@ -559,7 +960,8 @@ function sortBy(col) {
 function applySortAndRender() {
   const numCols = ['stock','dias','reorden','futuro','venta','leadtime'];
   filtered.sort((a,b) => {
-    let va=a[sortCol], vb=b[sortCol];
+    let va = sortCol === 'futuro' ? stockFuturo(a) : a[sortCol];
+    let vb = sortCol === 'futuro' ? stockFuturo(b) : b[sortCol];
     if (numCols.includes(sortCol)) { va=parseFloat(va)||0; vb=parseFloat(vb)||0; }
     if (va<vb) return sortAsc?-1:1;
     if (va>vb) return sortAsc?1:-1;
@@ -568,15 +970,30 @@ function applySortAndRender() {
   renderTable(filtered);
 }
 
+// ── LOAD DATA ─────────────────────────────────────────────────
 async function loadData() {
   document.getElementById('last-update').textContent = 'Actualizando...';
-  document.getElementById('tabla-body').innerHTML = '<tr><td colspan="11"><div class="loading-state"><div class="spinner"></div>Cargando datos desde Google Sheets...</div></td></tr>';
+  document.getElementById('tabla-body').innerHTML = '<tr><td colspan="11"><div class="loading-state"><div class="spinner"></div>Cargando datos...</div></td></tr>';
   try {
-    const res = await fetch(CSV_URL + '&t=' + Date.now());
-    if (!res.ok) throw new Error('Error HTTP ' + res.status);
-    const text = await res.text();
+    const [csvRes, ocRes] = await Promise.all([
+      fetch(CSV_URL + '&t=' + Date.now()),
+      fetch(`${SCRIPT_URL}?tipo=get_ordenes`)
+    ]);
+
+    const text = await csvRes.text();
     const rows = parseCSV(text);
     allData = rows.map(mapRow).filter(r => r.sku && r.reponer.toUpperCase() !== 'NO');
+
+    try {
+      const ocData = await ocRes.json();
+      if (ocData.ok) {
+        allOrdenes = ocData.ordenes || [];
+        allLineasOC = ocData.lineas || [];
+        calcularPendientesOC();
+        updateOCBadge();
+      }
+    } catch(e) {}
+
     updateScores(allData);
     populateFilter('f-estado', allData.map(r=>r.estado));
     populateFilter('f-proveedor', allData.flatMap(r=>r.proveedor.split(',').map(p=>p.trim())));
@@ -592,7 +1009,7 @@ async function loadData() {
     document.getElementById('th-dias').classList.add('active');
   } catch(e) {
     document.getElementById('last-update').textContent = 'Error al cargar los datos';
-    document.getElementById('tabla-body').innerHTML = `<tr><td colspan="11"><div class="error-state">No se pudo conectar con Google Sheets.<br>Comprueba que la hoja esta publicada correctamente.</div></td></tr>`;
+    document.getElementById('tabla-body').innerHTML = `<tr><td colspan="11"><div class="error-state">No se pudo conectar con Google Sheets.</div></td></tr>`;
   }
 }
 

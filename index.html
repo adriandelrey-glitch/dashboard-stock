@@ -456,11 +456,22 @@ function mapRow(raw) {
 function rowKey(r) { return r.sku + '|' + r.talla; }
 
 function stockFuturo(r) {
-  return r.futuroSheets + (pendientesOC[rowKey(r)] || 0) + (inboundStock[r.sku] || 0);
+  return r.futuroSheets + (pendientesOC[rowKey(r)] || 0);
 }
 
 function inboundUnidades(r) {
   return inboundStock[r.sku] || 0;
+}
+
+// ── ESTADO CALCULADO EN DASHBOARD ────────────────────────────
+function calcularEstado(r) {
+  const venta = r.venta || 0;
+  if (venta === 0) return '⚪ Sin ventas';
+  const futuro = stockFuturo(r);
+  const diasRestantes = venta > 0 ? (r.stock / (venta / 30)) : 999;
+  if (futuro <= r.reorden) return '🔴 Reponer ya';
+  if (diasRestantes <= r.leadtime * 2) return '🟡 Reponer pronto';
+  return '🟢 OK';
 }
 
 // ── HELPERS ───────────────────────────────────────────────────
@@ -469,6 +480,10 @@ function estadoClass(e) {
   if (e.includes('Reponer pronto')) return 'badge-yellow';
   if (e.includes('OK')) return 'badge-green';
   return 'badge-gray';
+}
+
+function estadoClassDashboard(r) {
+  return estadoClass(calcularEstado(r));
 }
 
 function diasColor(d) {
@@ -495,10 +510,10 @@ function populateFilter(id, values) {
 }
 
 function updateScores(data) {
-  document.getElementById('sc-red').textContent = data.filter(d => d.estado.includes('Reponer ya')).length;
-  document.getElementById('sc-yellow').textContent = data.filter(d => d.estado.includes('Reponer pronto')).length;
-  document.getElementById('sc-green').textContent = data.filter(d => d.estado.includes('OK')).length;
-  document.getElementById('sc-gray').textContent = data.filter(d => d.estado.includes('Sin ventas')).length;
+  document.getElementById('sc-red').textContent = data.filter(d => calcularEstado(d).includes('Reponer ya')).length;
+  document.getElementById('sc-yellow').textContent = data.filter(d => calcularEstado(d).includes('Reponer pronto')).length;
+  document.getElementById('sc-green').textContent = data.filter(d => calcularEstado(d).includes('OK')).length;
+  document.getElementById('sc-gray').textContent = data.filter(d => calcularEstado(d).includes('Sin ventas')).length;
   document.getElementById('sc-total').textContent = data.length;
 }
 
@@ -606,7 +621,7 @@ function renderTable(data) {
           ? `<input type="number" class="qty-input ${qtySancar>0?'has-value-sancar':''}" data-key="${key}" data-prov="SANCAR" value="${qtySancar}" min="0" placeholder="0" oninput="onQtyChange('SANCAR','${key}',this.value)">`
           : `<span style="color:var(--text-faint);font-size:11px">—</span>`}
       </td>
-      <td><span class="badge ${estadoClass(r.estado)}">${r.estado}</span></td>
+      <td><span class="badge ${estadoClassDashboard(r)}">${calcularEstado(r)}</span></td>
     </tr>`;
   }).join('');
 
@@ -707,7 +722,7 @@ function renderResumenTabla(lineas) {
       <td style="padding:6px 10px" title="${r.nombre}">${r.nombre.length>30?r.nombre.slice(0,30)+'…':r.nombre}</td>
       <td style="padding:6px 10px;text-align:center">${r.talla}</td>
       <td style="padding:6px 10px;text-align:right;font-family:'DM Mono',monospace;font-weight:600;color:var(--accent)">${r.cantidad}</td>
-      <td style="padding:6px 10px"><span class="badge ${estadoClass(r.estado)}">${r.estado}</span></td>
+      <td style="padding:6px 10px"><span class="badge ${estadoClassDashboard(r)}">${calcularEstado(r)}</span></td>
     </tr>`).join('')}
     </tbody></table></div>`;
 }
@@ -1067,7 +1082,7 @@ function applyFilters() {
   const coleccion = document.getElementById('f-coleccion').value;
   filtered = allData.filter(r => {
     if (search && !r.sku.toLowerCase().includes(search) && !r.nombre.toLowerCase().includes(search)) return false;
-    if (estado && r.estado !== estado) return false;
+    if (estado && calcularEstado(r) !== estado) return false;
     if (proveedor && !r.proveedor.includes(proveedor)) return false;
     if (deporte && r.deporte !== deporte) return false;
     if (coleccion && r.coleccion !== coleccion) return false;
@@ -1127,7 +1142,7 @@ async function loadData() {
     } catch(e) {}
 
     updateScores(allData);
-    populateFilter('f-estado', allData.map(r=>r.estado));
+    populateFilter('f-estado', allData.map(r=>calcularEstado(r)));
     populateFilter('f-proveedor', allData.flatMap(r=>r.proveedor.split(',').map(p=>p.trim())));
     populateFilter('f-deporte', allData.map(r=>r.deporte));
     populateFilter('f-coleccion', allData.map(r=>r.coleccion));

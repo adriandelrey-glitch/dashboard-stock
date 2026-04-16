@@ -189,6 +189,14 @@
   tbody tr.clickable:hover { background: #F5F8FF; }
   tbody tr.row-expanded { background: var(--blue-bg) !important; }
 
+  .toggle-wrap { display:inline-flex; align-items:center; gap:6px; }
+  .toggle { position:relative; width:32px; height:18px; cursor:pointer; }
+  .toggle input { opacity:0; width:0; height:0; }
+  .toggle-slider { position:absolute; inset:0; background:var(--red-bg); border:1px solid var(--red-border); border-radius:18px; transition:0.2s; }
+  .toggle-slider:before { content:''; position:absolute; width:12px; height:12px; left:2px; top:2px; background:var(--red); border-radius:50%; transition:0.2s; }
+  .toggle input:checked + .toggle-slider { background:var(--green-bg); border-color:var(--green-border); }
+  .toggle input:checked + .toggle-slider:before { transform:translateX(14px); background:var(--green); }
+
   .confirm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 999; }
   .confirm-box { background: var(--surface); border-radius: var(--radius); padding: 1.5rem; max-width: 380px; width: 90%; box-shadow: 0 8px 32px rgba(0,0,0,0.15); }
   .confirm-box h3 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
@@ -216,6 +224,7 @@
   <div class="tabs">
     <button class="tab-btn active" onclick="switchTab('stock')">Stock</button>
     <button class="tab-btn" onclick="switchTab('ordenes')">Ordenes de compra <span id="oc-badge" style="display:none;background:var(--accent);color:white;font-size:10px;padding:1px 6px;border-radius:100px;margin-left:4px"></span></button>
+    <button class="tab-btn" onclick="switchTab('noreponer')">No reponer <span id="nr-badge" style="display:none;background:var(--text-muted);color:white;font-size:10px;padding:1px 6px;border-radius:100px;margin-left:4px"></span></button>
   </div>
 
   <!-- TAB STOCK -->
@@ -273,6 +282,7 @@
               <th onclick="sortBy('pedSancar')" id="th-pedSancar" class="sancar-col no-sort" style="text-align:right">Ped. SANCAR</th>
               <th class="no-sort rar-col" style="text-align:center">Cant. RAR</th>
               <th class="no-sort sancar-col" style="text-align:center">Cant. SANCAR</th>
+              <th class="no-sort" style="text-align:center">Reponer</th>
               <th onclick="sortBy('estado')" id="th-estado">Estado</th>
             </tr>
           </thead>
@@ -325,6 +335,35 @@
       </div>
     </div>
 
+  </div>
+
+  <!-- TAB NO REPONER -->
+  <div class="tab-content" id="tab-noreponer">
+    <div class="section-head" style="margin-bottom:1.25rem">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span class="section-title">Productos sin reponer</span>
+        <span class="count-pill" id="nr-count">0 referencias</span>
+      </div>
+      <span style="font-size:12px;color:var(--text-faint)">Activa el toggle en la tabla de Stock para mover productos aqui</span>
+    </div>
+    <div class="table-container">
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Producto</th>
+              <th>SKU</th>
+              <th>Talla</th>
+              <th>Proveedor</th>
+              <th style="text-align:right">Stock</th>
+              <th style="text-align:right">Venta/mes</th>
+              <th style="text-align:center">Reponer</th>
+            </tr>
+          </thead>
+          <tbody id="nr-body"><tr><td colspan="7"><div class="empty-state">Ningun producto marcado como no reponer</div></td></tr></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
   <!-- TAB ORDENES -->
@@ -417,15 +456,17 @@ const PAGE_SIZE = 50;
 const cantidadesRar = {};
 const cantidadesSancar = {};
 let pendientesOC = {};
+let noReponer = JSON.parse(localStorage.getItem('noReponer') || '{}');
 let inboundStock = {};
 let allOrdenes = [], allLineasOC = [];
 
 // ── TABS ──────────────────────────────────────────────────────
 function switchTab(tab) {
-  document.querySelectorAll('.tab-btn').forEach((b,i) => b.classList.toggle('active', ['stock','ordenes'][i] === tab));
+  document.querySelectorAll('.tab-btn').forEach((b,i) => b.classList.toggle('active', ['stock','ordenes','noreponer'][i] === tab));
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.add('active');
   if (tab === 'ordenes') loadOrdenes();
+  if (tab === 'noreponer') renderNoReponer();
 }
 
 // ── CSV ───────────────────────────────────────────────────────
@@ -481,7 +522,8 @@ function calcularEstado(r) {
   const venta = r.venta || 0;
   if (venta === 0) return '⚪ Sin ventas';
   const futuro = stockFuturo(r);
-  const diasRestantes = venta > 0 ? (r.stock / (venta / 30)) : 999;
+  const ventaDiaria = venta / 30;
+  const diasRestantes = ventaDiaria > 0 ? (futuro / ventaDiaria) : 999;
   if (futuro <= r.reorden) return '🔴 Reponer ya';
   if (diasRestantes <= r.leadtime * 2) return '🟡 Reponer pronto';
   return '🟢 OK';
@@ -657,6 +699,12 @@ function renderTable(data) {
         ${esSancar
           ? `<input type="number" class="qty-input ${qtySancar>0?'has-value-sancar':''}" data-key="${key}" data-prov="SANCAR" value="${qtySancar}" min="0" placeholder="0" oninput="onQtyChange('SANCAR','${key}',this.value)">`
           : `<span style="color:var(--text-faint);font-size:11px">—</span>`}
+      </td>
+      <td style="text-align:center" onclick="event.stopPropagation()">
+        <label class="toggle" title="${noReponer[key] ? 'No reponer' : 'Reponer'}">
+          <input type="checkbox" ${noReponer[key] ? '' : 'checked'} onchange="toggleReponer('${key}', this.checked)">
+          <span class="toggle-slider"></span>
+        </label>
       </td>
       <td><span class="badge ${estadoClassDashboard(r)}">${calcularEstado(r)}</span></td>
     </tr>${isExpanded ? renderExpandRow(r) : ''}`;
@@ -835,7 +883,8 @@ function generarPDF(prov) {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
   const W = 210, M = 14, R = 196;
-  const fecha = new Date().toLocaleDateString('es-ES');
+  const raw = new Date();
+  const fecha = `${String(raw.getDate()).padStart(2,'0')}/${String(raw.getMonth()+1).padStart(2,'0')}/${raw.getFullYear()}`;
   const totalUds = lineas.reduce((s, r) => s + r.cantidad, 0);
   const pdata = PROVEEDORES_DATA[prov];
 
@@ -936,7 +985,7 @@ function generarPDF(prov) {
     bodyStyles: { fontSize: 8.5, textColor: [40, 40, 40], cellPadding: 4 },
     alternateRowStyles: { fillColor: [248, 248, 248] },
     columnStyles: {
-      0: { cellWidth: 38, font: 'courier' },
+      0: { cellWidth: 38 },
       1: { cellWidth: 95 },
       2: { cellWidth: 22, halign: 'center' },
       3: { cellWidth: 22, halign: 'center', fontStyle: 'bold' }
@@ -966,6 +1015,53 @@ function generarPDF(prov) {
   doc.save(`${numero}_${prov}_${fecha.replace(/\//g,'-')}.pdf`);
 }
 
+// ── NO REPONER ────────────────────────────────────────────────
+function toggleReponer(key, reponer) {
+  if (reponer) {
+    delete noReponer[key];
+  } else {
+    noReponer[key] = true;
+  }
+  try { localStorage.setItem('noReponer', JSON.stringify(noReponer)); } catch(e) {}
+  updateNRBadge();
+  applyFilters();
+  renderNoReponer();
+}
+
+function updateNRBadge() {
+  const count = Object.keys(noReponer).length;
+  const badge = document.getElementById('nr-badge');
+  if (count > 0) { badge.textContent = count; badge.style.display = 'inline'; }
+  else badge.style.display = 'none';
+  document.getElementById('nr-count').textContent = `${count} referencias`;
+}
+
+function renderNoReponer() {
+  const items = allData.filter(r => noReponer[rowKey(r)]);
+  const tbody = document.getElementById('nr-body');
+  if (!items.length) {
+    tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state">Ningun producto marcado como no reponer</div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = items.map(r => {
+    const key = rowKey(r);
+    return `<tr>
+      <td title="${r.nombre}">${r.nombre}</td>
+      <td class="mono">${r.sku}</td>
+      <td>${r.talla}</td>
+      <td>${r.proveedor}</td>
+      <td class="num">${Math.round(r.stock)}</td>
+      <td class="num">${r.venta.toFixed(1)}</td>
+      <td style="text-align:center">
+        <label class="toggle" title="Volver a reponer">
+          <input type="checkbox" onchange="toggleReponer('${key}', this.checked)">
+          <span class="toggle-slider"></span>
+        </label>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
 // ── DESCARGA PDF DESDE LISTADO OC ────────────────────────────
 function descargarPDFOrden(numero) {
   const orden = allOrdenes.find(o => o.numero === numero);
@@ -976,7 +1072,8 @@ function descargarPDFOrden(numero) {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
   const W = 210, M = 14, R = 196;
-  const fecha = orden.fecha || new Date().toLocaleDateString('es-ES');
+  const rawFecha = orden.fecha ? orden.fecha.toString().slice(0,10).split('-') : null;
+  const fecha = rawFecha ? `${rawFecha[2]}/${rawFecha[1]}/${rawFecha[0]}` : (() => { const d = new Date(); return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`; })();
   const prov = orden.proveedor;
   const pdata = PROVEEDORES_DATA[prov] || { nombre: prov, dir1: '', dir2: '', cif: '', email: '' };
   const totalUds = lineas.reduce((s, l) => s + (parseInt(l.cantidadPedida)||0), 0);
@@ -1040,7 +1137,7 @@ function descargarPDFOrden(numero) {
     bodyStyles: { fontSize: 8.5, textColor: [40,40,40], cellPadding: 4 },
     alternateRowStyles: { fillColor: [248,248,248] },
     columnStyles: {
-      0: { cellWidth: 38, font: 'courier' },
+      0: { cellWidth: 38 },
       1: { cellWidth: 95 },
       2: { cellWidth: 22, halign: 'center' },
       3: { cellWidth: 22, halign: 'center', fontStyle: 'bold' }
@@ -1392,6 +1489,7 @@ function applyFilters() {
   const deporte = document.getElementById('f-deporte').value;
   const coleccion = document.getElementById('f-coleccion').value;
   filtered = allData.filter(r => {
+    if (noReponer[rowKey(r)]) return false;
     if (search && !r.sku.toLowerCase().includes(search) && !r.nombre.toLowerCase().includes(search)) return false;
     if (estado && calcularEstado(r) !== estado) return false;
     if (proveedor && !r.proveedor.includes(proveedor)) return false;
@@ -1462,6 +1560,7 @@ async function loadData() {
     renderChart(allData);
     updateOrdenBtn();
     const now = new Date();
+    updateNRBadge();
     document.getElementById('last-update').textContent = `${allData.length} referencias cargadas`;
     document.getElementById('update-time').textContent = `Actualizado: ${now.toLocaleTimeString('es-ES')}`;
     document.getElementById('th-dias').classList.add('active');

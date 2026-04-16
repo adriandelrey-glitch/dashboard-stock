@@ -529,6 +529,25 @@ function calcularPendientesOC() {
   });
 }
 
+// ── PEDIDOS POR PROVEEDOR DESDE OC ───────────────────────────
+let pedidosRarOC = {};
+let pedidosSancarOC = {};
+
+function calcularPedidosDesdeOC() {
+  pedidosRarOC = {};
+  pedidosSancarOC = {};
+  allOrdenes.forEach(o => {
+    if (o.estado === 'Recibido') return;
+    const lineas = allLineasOC.filter(l => l.numero === o.numero);
+    lineas.forEach(l => {
+      const pendiente = Math.max(0, (parseInt(l.cantidadPedida)||0) - (parseInt(l.cantidadRecibida)||0));
+      if (pendiente <= 0) return;
+      if (o.proveedor === 'RAR') pedidosRarOC[l.sku] = (pedidosRarOC[l.sku] || 0) + pendiente;
+      else if (o.proveedor === 'SANCAR') pedidosSancarOC[l.sku] = (pedidosSancarOC[l.sku] || 0) + pendiente;
+    });
+  });
+}
+
 // ── TABLA STOCK ───────────────────────────────────────────────
 function updateOrdenBtn() {
   const linRar = getLineasProveedor('RAR');
@@ -609,8 +628,12 @@ function renderTable(data) {
         ${inbound>0?`<span style="font-size:10px;color:#D4680A;margin-left:2px" title="En transito Bigblue">▲${inbound}</span>`:''}
       </td>
       <td class="num">${r.venta.toFixed(1)}</td>
-      <td class="num" style="color:${r.pedRar>0?'var(--blue)':'var(--text-faint)'}">${r.pedRar>0?Math.round(r.pedRar):'—'}</td>
-      <td class="num" style="color:${r.pedSancar>0?'var(--green)':'var(--text-faint)'}">${r.pedSancar>0?Math.round(r.pedSancar):'—'}</td>
+      <td class="num" style="color:${(pedidosRarOC[r.sku]||0)>0?'var(--blue)':'var(--text-faint)'}">
+        ${(pedidosRarOC[r.sku]||0)>0?Math.round(pedidosRarOC[r.sku]):'—'}
+      </td>
+      <td class="num" style="color:${(pedidosSancarOC[r.sku]||0)>0?'var(--green)':'var(--text-faint)'}">
+        ${(pedidosSancarOC[r.sku]||0)>0?Math.round(pedidosSancarOC[r.sku]):'—'}
+      </td>
       <td style="text-align:center">
         ${esRar
           ? `<input type="number" class="qty-input ${qtyRar>0?'has-value-rar':''}" data-key="${key}" data-prov="RAR" value="${qtyRar}" min="0" placeholder="0" oninput="onQtyChange('RAR','${key}',this.value)">`
@@ -840,6 +863,7 @@ async function loadOrdenes() {
       allOrdenes = data.ordenes || [];
       allLineasOC = data.lineas || [];
       calcularPendientesOC();
+      calcularPedidosDesdeOC();
       updateOCScorecards();
       updateOCBadge();
       renderOrdenes();
@@ -1133,7 +1157,7 @@ async function loadData() {
 
     try {
       const ocData = await ocRes.json();
-      if (ocData.ok) { allOrdenes = ocData.ordenes||[]; allLineasOC = ocData.lineas||[]; calcularPendientesOC(); updateOCBadge(); }
+      if (ocData.ok) { allOrdenes = ocData.ordenes||[]; allLineasOC = ocData.lineas||[]; calcularPendientesOC(); calcularPedidosDesdeOC(); updateOCBadge(); }
     } catch(e) {}
 
     try {

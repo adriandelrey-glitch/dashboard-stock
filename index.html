@@ -659,7 +659,7 @@ function renderTable(data) {
           : `<span style="color:var(--text-faint);font-size:11px">—</span>`}
       </td>
       <td><span class="badge ${estadoClassDashboard(r)}">${calcularEstado(r)}</span></td>
-    </tr>${isExpanded ? renderExpandRow(r) : ''}\`;
+    </tr>${isExpanded ? renderExpandRow(r) : ''}`;
   }).join('');
 
   document.getElementById('page-info').textContent = `${start+1}–${Math.min(start+PAGE_SIZE,data.length)} de ${data.length}`;
@@ -968,8 +968,7 @@ function renderOrdenes() {
             const recibida = parseInt(l.cantidadRecibida)||0;
             const pendiente = Math.max(0, pedida - recibida);
             const completo = recibida >= pedida;
-            const isExpanded = expandedKey === key;
-    return `<tr class="clickable ${isExpanded?'row-expanded':''}" onclick="toggleProductoOC('${key}')">
+            return `<tr>
               <td class="mono">${l.sku}</td>
               <td>${l.nombre}</td>
               <td>${l.talla}</td>

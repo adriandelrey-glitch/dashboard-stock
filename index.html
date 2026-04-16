@@ -223,8 +223,8 @@
 
   <div class="tabs">
     <button class="tab-btn active" onclick="switchTab('stock')">Stock</button>
-    <button class="tab-btn" onclick="switchTab('ordenes')">Ordenes de compra <span id="oc-badge" style="display:none;background:var(--accent);color:white;font-size:10px;padding:1px 6px;border-radius:100px;margin-left:4px"></span></button>
     <button class="tab-btn" onclick="switchTab('noreponer')">No reponer <span id="nr-badge" style="display:none;background:var(--text-muted);color:white;font-size:10px;padding:1px 6px;border-radius:100px;margin-left:4px"></span></button>
+    <button class="tab-btn" onclick="switchTab('ordenes')">Ordenes de compra <span id="oc-badge" style="display:none;background:var(--accent);color:white;font-size:10px;padding:1px 6px;border-radius:100px;margin-left:4px"></span></button>
   </div>
 
   <!-- TAB STOCK -->
@@ -270,7 +270,7 @@
         <table>
           <thead>
             <tr>
-              <th onclick="sortBy('sku')" id="th-sku">Producto</th>
+              <th onclick="sortBy('sku')" id="th-sku">SKU</th>
               <th onclick="sortBy('nombre')" id="th-nombre">Producto</th>
               <th onclick="sortBy('talla')" id="th-talla">Talla</th>
               <th onclick="sortBy('proveedor')" id="th-proveedor">Proveedor</th>
@@ -351,16 +351,16 @@
         <table>
           <thead>
             <tr>
-              <th>Producto</th>
-              <th>SKU</th>
-              <th>Talla</th>
-              <th>Proveedor</th>
-              <th style="text-align:right">Stock</th>
-              <th style="text-align:right">Venta/mes</th>
-              <th style="text-align:center">Reponer</th>
+              <th onclick="sortByNR('sku')" id="nr-th-sku">SKU</th>
+              <th onclick="sortByNR('nombre')" id="nr-th-nombre">Producto</th>
+              <th onclick="sortByNR('talla')" id="nr-th-talla">Talla</th>
+              <th onclick="sortByNR('proveedor')" id="nr-th-proveedor">Proveedor</th>
+              <th onclick="sortByNR('stock')" id="nr-th-stock" style="text-align:right">Stock</th>
+              <th onclick="sortByNR('venta')" id="nr-th-venta" style="text-align:right">Venta/mes</th>
+              <th class="no-sort" style="text-align:center">Reponer</th>
             </tr>
           </thead>
-          <tbody id="nr-body"><tr><td colspan="7"><div class="empty-state">Ningun producto marcado como no reponer</div></td></tr></tbody>
+          <tbody id="nr-body"><tr><td colspan="7"><div class="loading-state"><div class="spinner"></div>Cargando...</div></td></tr></tbody>
         </table>
       </div>
     </div>
@@ -462,7 +462,7 @@ let allOrdenes = [], allLineasOC = [];
 
 // ── TABS ──────────────────────────────────────────────────────
 function switchTab(tab) {
-  document.querySelectorAll('.tab-btn').forEach((b,i) => b.classList.toggle('active', ['stock','ordenes','noreponer'][i] === tab));
+  document.querySelectorAll('.tab-btn').forEach((b,i) => b.classList.toggle('active', ['stock','noreponer','ordenes'][i] === tab));
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.add('active');
   if (tab === 'ordenes') loadOrdenes();
@@ -1016,6 +1016,8 @@ function generarPDF(prov) {
 }
 
 // ── NO REPONER ────────────────────────────────────────────────
+let nrSortCol = 'sku', nrSortAsc = true;
+
 function toggleReponer(key, reponer) {
   if (reponer) {
     delete noReponer[key];
@@ -1029,15 +1031,47 @@ function toggleReponer(key, reponer) {
 }
 
 function updateNRBadge() {
-  const count = Object.keys(noReponer).length;
+  // Combinar los de Sheets (col F = NO) + los marcados manualmente en dashboard
+  const fromSheets = allData.filter(r => r.reponer.toUpperCase() === 'NO');
+  const fromToggle = allData.filter(r => noReponer[rowKey(r)] && r.reponer.toUpperCase() !== 'NO');
+  const total = fromSheets.length + fromToggle.length;
   const badge = document.getElementById('nr-badge');
-  if (count > 0) { badge.textContent = count; badge.style.display = 'inline'; }
+  if (total > 0) { badge.textContent = total; badge.style.display = 'inline'; }
   else badge.style.display = 'none';
-  document.getElementById('nr-count').textContent = `${count} referencias`;
+  const el = document.getElementById('nr-count');
+  if (el) el.textContent = `${total} referencias`;
+}
+
+function sortByNR(col) {
+  if (nrSortCol === col) nrSortAsc = !nrSortAsc;
+  else { nrSortCol = col; nrSortAsc = true; }
+  document.querySelectorAll('[id^="nr-th-"]').forEach(th => th.classList.remove('active'));
+  const th = document.getElementById('nr-th-' + col);
+  if (th) th.classList.add('active');
+  renderNoReponer();
 }
 
 function renderNoReponer() {
-  const items = allData.filter(r => noReponer[rowKey(r)]);
+  // Incluir productos de Sheets con col F=NO + marcados manualmente con toggle
+  const allDataFull = [...(window._allDataFull || [])];
+  const fromSheets = allDataFull.filter(r => r.reponer.toUpperCase() === 'NO');
+  const fromToggle = allData.filter(r => noReponer[rowKey(r)]);
+  const seen = new Set();
+  const items = [...fromSheets, ...fromToggle].filter(r => {
+    const k = rowKey(r);
+    if (seen.has(k)) return false;
+    seen.add(k); return true;
+  });
+
+  const numCols = ['stock','venta'];
+  items.sort((a,b) => {
+    let va = a[nrSortCol], vb = b[nrSortCol];
+    if (numCols.includes(nrSortCol)) { va = parseFloat(va)||0; vb = parseFloat(vb)||0; }
+    if (va < vb) return nrSortAsc ? -1 : 1;
+    if (va > vb) return nrSortAsc ? 1 : -1;
+    return 0;
+  });
+
   const tbody = document.getElementById('nr-body');
   if (!items.length) {
     tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state">Ningun producto marcado como no reponer</div></td></tr>';
@@ -1045,18 +1079,25 @@ function renderNoReponer() {
   }
   tbody.innerHTML = items.map(r => {
     const key = rowKey(r);
+    const fromSheetsItem = r.reponer.toUpperCase() === 'NO';
     return `<tr>
+      <td style="text-align:center;padding:6px 10px;min-width:70px">
+        ${r.imagen ? `<img src="${r.imagen}" alt="${r.sku}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;display:block;margin:0 auto 3px" onerror="this.style.display='none'">` : ''}
+        <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-muted);display:block">${r.sku}</span>
+      </td>
       <td title="${r.nombre}">${r.nombre}</td>
-      <td class="mono">${r.sku}</td>
       <td>${r.talla}</td>
-      <td>${r.proveedor}</td>
+      <td title="${r.proveedor}">${r.proveedor}</td>
       <td class="num">${Math.round(r.stock)}</td>
       <td class="num">${r.venta.toFixed(1)}</td>
-      <td style="text-align:center">
-        <label class="toggle" title="Volver a reponer">
-          <input type="checkbox" onchange="toggleReponer('${key}', this.checked)">
-          <span class="toggle-slider"></span>
-        </label>
+      <td style="text-align:center" onclick="event.stopPropagation()">
+        ${fromSheetsItem
+          ? `<span class="badge badge-gray" style="font-size:10px">Sheets</span>`
+          : `<label class="toggle" title="Volver a reponer">
+              <input type="checkbox" onchange="toggleReponer('${key}', this.checked)">
+              <span class="toggle-slider"></span>
+            </label>`
+        }
       </td>
     </tr>`;
   }).join('');
@@ -1538,7 +1579,8 @@ async function loadData() {
       fetch(`${SCRIPT_URL}?tipo=get_inbound`)
     ]);
     const text = await csvRes.text();
-    allData = parseCSV(text).map(mapRow).filter(r => r.sku && r.reponer.toUpperCase() !== 'NO');
+    window._allDataFull = parseCSV(text).map(mapRow).filter(r => r.sku);
+    allData = window._allDataFull.filter(r => r.reponer.toUpperCase() !== 'NO');
 
     try {
       const ocData = await ocRes.json();

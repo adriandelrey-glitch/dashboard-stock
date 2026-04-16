@@ -176,6 +176,19 @@
   .oc-filter-bar select { font-family: 'DM Sans', sans-serif; font-size: 13px; padding: 6px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--bg); color: var(--text); outline: none; }
   .oc-filter-bar label { font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-faint); }
 
+  .expand-row td { padding: 0 !important; border-bottom: none !important; }
+  .expand-content { background: var(--blue-bg); border-bottom: 1px solid var(--blue-border); overflow: hidden; max-height: 0; transition: max-height 0.25s ease; }
+  .expand-content.open { max-height: 400px; }
+  .expand-inner { padding: 0.875rem 1.25rem; }
+  .expand-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: var(--blue); margin-bottom: 0.5rem; }
+  .expand-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .expand-table td { padding: 6px 10px; border-bottom: 1px solid var(--blue-border); }
+  .expand-table tr:last-child td { border-bottom: none; }
+  .expand-table .num { font-family: 'DM Mono', monospace; text-align: right; }
+  tbody tr.clickable { cursor: pointer; }
+  tbody tr.clickable:hover { background: #F5F8FF; }
+  tbody tr.row-expanded { background: var(--blue-bg) !important; }
+
   .confirm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 999; }
   .confirm-box { background: var(--surface); border-radius: var(--radius); padding: 1.5rem; max-width: 380px; width: 90%; box-shadow: 0 8px 32px rgba(0,0,0,0.15); }
   .confirm-box h3 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
@@ -456,7 +469,7 @@ function mapRow(raw) {
 function rowKey(r) { return r.sku + '|' + r.talla; }
 
 function stockFuturo(r) {
-  return r.futuroSheets + (pendientesOC[rowKey(r)] || 0);
+  return r.stock + (inboundStock[r.sku] || 0) + (pendientesOC[rowKey(r)] || 0);
 }
 
 function inboundUnidades(r) {
@@ -609,7 +622,8 @@ function renderTable(data) {
     const qtyRar = cantidadesRar[key] || '';
     const qtySancar = cantidadesSancar[key] || '';
 
-    return `<tr>
+    const isExpanded = expandedKey === key;
+    return `<tr class="clickable ${isExpanded?'row-expanded':''}" onclick="toggleProductoOC('${key}')">
       <td style="text-align:center;padding:6px 10px;min-width:70px">
         ${r.imagen ? `<img src="${r.imagen}" alt="${r.sku}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;display:block;margin:0 auto 3px" onerror="this.style.display='none'">` : ''}
         <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-muted);display:block">${r.sku}</span>
@@ -645,7 +659,7 @@ function renderTable(data) {
           : `<span style="color:var(--text-faint);font-size:11px">—</span>`}
       </td>
       <td><span class="badge ${estadoClassDashboard(r)}">${calcularEstado(r)}</span></td>
-    </tr>`;
+    </tr>${isExpanded ? renderExpandRow(r) : ''}\`;
   }).join('');
 
   document.getElementById('page-info').textContent = `${start+1}–${Math.min(start+PAGE_SIZE,data.length)} de ${data.length}`;
@@ -954,7 +968,8 @@ function renderOrdenes() {
             const recibida = parseInt(l.cantidadRecibida)||0;
             const pendiente = Math.max(0, pedida - recibida);
             const completo = recibida >= pedida;
-            return `<tr>
+            const isExpanded = expandedKey === key;
+    return `<tr class="clickable ${isExpanded?'row-expanded':''}" onclick="toggleProductoOC('${key}')">
               <td class="mono">${l.sku}</td>
               <td>${l.nombre}</td>
               <td>${l.talla}</td>
@@ -1028,6 +1043,70 @@ async function guardarRecepcion(numero) {
       alert('Error al guardar: ' + (data.error || 'desconocido'));
     }
   } catch(e) { alert('Error de conexion'); }
+}
+
+// ── EXPAND FILA PRODUCTO ─────────────────────────────────────
+let expandedKey = null;
+
+function toggleProductoOC(key) {
+  if (expandedKey === key) {
+    expandedKey = null;
+  } else {
+    expandedKey = key;
+  }
+  applySortAndRender();
+}
+
+function getOCsDeProducto(sku) {
+  const ocs = [];
+  allOrdenes.forEach(o => {
+    if (o.estado === 'Recibido') return;
+    const lineas = allLineasOC.filter(l => l.numero === o.numero && l.sku === sku);
+    if (!lineas.length) return;
+    lineas.forEach(l => {
+      const pedida = parseInt(l.cantidadPedida) || 0;
+      const recibida = parseInt(l.cantidadRecibida) || 0;
+      const pendiente = Math.max(0, pedida - recibida);
+      ocs.push({ numero: o.numero, proveedor: o.proveedor, fecha: o.fecha, estado: o.estado, talla: l.talla, pedida, recibida, pendiente });
+    });
+  });
+  return ocs;
+}
+
+function renderExpandRow(r) {
+  const key = rowKey(r);
+  const ocs = getOCsDeProducto(r.sku);
+  const totalPendiente = ocs.reduce((s, o) => s + o.pendiente, 0);
+  if (!ocs.length) {
+    return `<tr class="expand-row"><td colspan="13"><div class="expand-content open"><div class="expand-inner">
+      <div class="expand-title">${r.sku} — Sin ordenes activas</div>
+    </div></div></td></tr>`;
+  }
+  return `<tr class="expand-row"><td colspan="13"><div class="expand-content open"><div class="expand-inner">
+    <div class="expand-title">${r.sku} — ${ocs.length} linea${ocs.length>1?'s':''} en ordenes activas · ${totalPendiente} uds pendientes</div>
+    <table class="expand-table">
+      <thead><tr>
+        <td style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--blue);padding:4px 10px">Orden</td>
+        <td style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--blue);padding:4px 10px">Proveedor</td>
+        <td style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--blue);padding:4px 10px">Talla</td>
+        <td style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--blue);padding:4px 10px;text-align:right">Pedido</td>
+        <td style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--blue);padding:4px 10px;text-align:right">Recibido</td>
+        <td style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--blue);padding:4px 10px;text-align:right">Pendiente</td>
+        <td style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--blue);padding:4px 10px">Estado</td>
+        <td style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--blue);padding:4px 10px">Fecha</td>
+      </tr></thead>
+      <tbody>${ocs.map(o => `<tr>
+        <td style="font-family:'DM Mono',monospace;color:var(--accent);font-weight:500;padding:6px 10px">${o.numero}</td>
+        <td style="padding:6px 10px">${o.proveedor}</td>
+        <td style="padding:6px 10px">${o.talla}</td>
+        <td class="num">${o.pedida}</td>
+        <td class="num">${o.recibida}</td>
+        <td class="num" style="color:${o.pendiente>0?'var(--yellow)':'var(--green)'};font-weight:500">${o.pendiente}</td>
+        <td style="padding:6px 10px"><span class="badge ${estadoOCClass(o.estado)}">${o.estado}</span></td>
+        <td style="padding:6px 10px;color:var(--text-muted)">${o.fecha}</td>
+      </tr>`).join('')}</tbody>
+    </table>
+  </div></div></td></tr>`;
 }
 
 // ── CONFIRM DIALOG ────────────────────────────────────────────

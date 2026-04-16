@@ -404,6 +404,7 @@ const PAGE_SIZE = 50;
 const cantidadesRar = {};
 const cantidadesSancar = {};
 let pendientesOC = {};
+let inboundStock = {};
 let allOrdenes = [], allLineasOC = [];
 
 // ── TABS ──────────────────────────────────────────────────────
@@ -455,7 +456,11 @@ function mapRow(raw) {
 function rowKey(r) { return r.sku + '|' + r.talla; }
 
 function stockFuturo(r) {
-  return r.futuroSheets + (pendientesOC[rowKey(r)] || 0);
+  return r.futuroSheets + (pendientesOC[rowKey(r)] || 0) + (inboundStock[r.sku] || 0);
+}
+
+function inboundUnidades(r) {
+  return inboundStock[r.sku] || 0;
 }
 
 // ── HELPERS ───────────────────────────────────────────────────
@@ -564,6 +569,7 @@ function renderTable(data) {
     const dW = r.dias >= 999 ? 100 : Math.min(100, (r.dias / 90) * 100);
     const futuro = stockFuturo(r);
     const pendiente = pendientesOC[key] || 0;
+    const inbound = inboundUnidades(r);
     const esRar = r.proveedor.includes('RAR');
     const esSancar = r.proveedor.includes('SANCAR');
     const qtyRar = cantidadesRar[key] || '';
@@ -582,8 +588,10 @@ function renderTable(data) {
         <span style="color:${dColor};font-family:'DM Mono',monospace;font-size:12px">${dDisplay}</span>
         <div class="dias-track"><div class="dias-fill" style="width:${dW}%;background:${dColor}"></div></div>
       </div></td>
-      <td class="num" style="${pendiente>0?'color:var(--accent);font-weight:500':''}">
-        ${Math.round(futuro)}${pendiente>0?`<span style="font-size:10px;color:var(--accent);margin-left:3px">▲${pendiente}</span>`:''}
+      <td class="num" style="${(pendiente>0||inbound>0)?'font-weight:500':''}">
+        <span style="color:${(pendiente>0||inbound>0)?'var(--text)':''}">${Math.round(futuro)}</span>
+        ${pendiente>0?`<span style="font-size:10px;color:var(--accent);margin-left:3px" title="Pendiente OC">▲${pendiente}</span>`:''}
+        ${inbound>0?`<span style="font-size:10px;color:#D4680A;margin-left:2px" title="En transito Bigblue">▲${inbound}</span>`:''}
       </td>
       <td class="num">${r.venta.toFixed(1)}</td>
       <td class="num" style="color:${r.pedRar>0?'var(--blue)':'var(--text-faint)'}">${r.pedRar>0?Math.round(r.pedRar):'—'}</td>
@@ -1100,9 +1108,10 @@ async function loadData() {
   document.getElementById('last-update').textContent = 'Actualizando...';
   document.getElementById('tabla-body').innerHTML = '<tr><td colspan="13"><div class="loading-state"><div class="spinner"></div>Cargando datos...</div></td></tr>';
   try {
-    const [csvRes, ocRes] = await Promise.all([
+    const [csvRes, ocRes, inboundRes] = await Promise.all([
       fetch(CSV_URL + '&t=' + Date.now()),
-      fetch(`${SCRIPT_URL}?tipo=get_ordenes`)
+      fetch(`${SCRIPT_URL}?tipo=get_ordenes`),
+      fetch(`${SCRIPT_URL}?tipo=get_inbound`)
     ]);
     const text = await csvRes.text();
     allData = parseCSV(text).map(mapRow).filter(r => r.sku && r.reponer.toUpperCase() !== 'NO');
@@ -1110,6 +1119,11 @@ async function loadData() {
     try {
       const ocData = await ocRes.json();
       if (ocData.ok) { allOrdenes = ocData.ordenes||[]; allLineasOC = ocData.lineas||[]; calcularPendientesOC(); updateOCBadge(); }
+    } catch(e) {}
+
+    try {
+      const inboundData = await inboundRes.json();
+      if (inboundData.ok) inboundStock = inboundData.inbound || {};
     } catch(e) {}
 
     updateScores(allData);

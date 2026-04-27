@@ -979,11 +979,11 @@ function generarPDF(prov) {
     bodyStyles: { fontSize: 8.5, textColor: [40, 40, 40], cellPadding: 4, minCellHeight: 14 },
     alternateRowStyles: { fillColor: [248, 248, 248] },
     columnStyles: {
-      0: { cellWidth: 16 },
-      1: { cellWidth: 36 },
-      2: { cellWidth: 85 },
-      3: { cellWidth: 20, halign: 'center' },
-      4: { cellWidth: 20, halign: 'center', fontStyle: 'bold' }
+      0: { cellWidth: 14 },
+      1: { cellWidth: 45 },
+      2: { cellWidth: 75 },
+      3: { cellWidth: 18, halign: 'center' },
+      4: { cellWidth: 18, halign: 'center', fontStyle: 'bold' }
     },
     margin: { left: M, right: M },
     didDrawCell: (data) => {
@@ -1191,11 +1191,11 @@ function descargarPDFOrden(numero) {
     bodyStyles: { fontSize: 8.5, textColor: [40,40,40], cellPadding: 4, minCellHeight: 14 },
     alternateRowStyles: { fillColor: [248,248,248] },
     columnStyles: {
-      0: { cellWidth: 16 },
-      1: { cellWidth: 36 },
-      2: { cellWidth: 85 },
-      3: { cellWidth: 20, halign: 'center' },
-      4: { cellWidth: 20, halign: 'center', fontStyle: 'bold' }
+      0: { cellWidth: 14 },
+      1: { cellWidth: 45 },
+      2: { cellWidth: 75 },
+      3: { cellWidth: 18, halign: 'center' },
+      4: { cellWidth: 18, halign: 'center', fontStyle: 'bold' }
     },
     didDrawCell: (data) => {
       if (data.column.index === 0 && data.row.section === 'body') {

@@ -458,7 +458,7 @@ const cantidadesSancar = {};
 let pendientesOC = {};
 let noReponer = JSON.parse(localStorage.getItem('noReponer') || '{}');
 let inboundStock = {};
-let allOrdenes = [], allLineasOC = [];
+let allOrdenes = [], allLineasOC = [], allRecepciones = [];
 
 // ── TABS ──────────────────────────────────────────────────────
 function switchTab(tab) {
@@ -1205,7 +1205,12 @@ function descargarPDFOrden(numero) {
 // ── ORDENES DE COMPRA ─────────────────────────────────────────
 async function loadOrdenesSilencioso() {
   try {
-    const res = await fetch(`${SCRIPT_URL}?tipo=get_ordenes`);
+    const [resOC, resRec] = await Promise.all([
+      fetch(`${SCRIPT_URL}?tipo=get_ordenes`),
+      fetch(`${SCRIPT_URL}?tipo=get_recepciones`)
+    ]);
+    const res = resOC;
+    try { const recData = await resRec.json(); if (recData.ok) allRecepciones = recData.recepciones || []; } catch(e) {}
     const data = await res.json();
     if (data.ok) { allOrdenes = data.ordenes || []; allLineasOC = data.lineas || []; }
   } catch(e) {}
@@ -1214,7 +1219,12 @@ async function loadOrdenesSilencioso() {
 async function loadOrdenes() {
   document.getElementById('oc-list-container').innerHTML = '<div class="loading-state"><div class="spinner"></div>Cargando ordenes...</div>';
   try {
-    const res = await fetch(`${SCRIPT_URL}?tipo=get_ordenes`);
+    const [resOC, resRec] = await Promise.all([
+      fetch(`${SCRIPT_URL}?tipo=get_ordenes`),
+      fetch(`${SCRIPT_URL}?tipo=get_recepciones`)
+    ]);
+    const res = resOC;
+    try { const recData = await resRec.json(); if (recData.ok) allRecepciones = recData.recepciones || []; } catch(e) {}
     const data = await res.json();
     if (data.ok) {
       allOrdenes = data.ordenes || [];
@@ -1302,33 +1312,33 @@ function renderOrdenes() {
           <thead><tr>
             <th>SKU</th><th>Producto</th><th>Talla</th>
             <th style="text-align:right">Pedido</th>
-            <th style="text-align:center">Recibido</th>
-            <th style="text-align:center">Rechazado</th>
+            <th style="text-align:right">Total recibido</th>
+            <th style="text-align:center">Recibir ahora</th>
             <th style="text-align:right">Pendiente</th>
+            <th style="text-align:center">Ultima recepcion</th>
           </tr></thead>
           <tbody>${lineas.map(l => {
             const pedida = parseInt(l.cantidadPedida)||0;
-            const recibida = parseInt(l.cantidadRecibida)||0;
-            const pendiente = Math.max(0, pedida - recibida);
-            const completo = recibida >= pedida;
+            const totalRecibido = parseInt(l.cantidadRecibida)||0;
+            const pendiente = Math.max(0, pedida - totalRecibido);
+            const ultimaRec = allRecepciones.filter(r => r.numero == o.numero && r.sku == l.sku && r.talla == l.talla).sort((a,b) => b.fecha > a.fecha ? 1 : -1)[0];
+            const ultimaFecha = ultimaRec ? (() => { const p = ultimaRec.fecha.toString().slice(0,10).split('-'); return p[2]+'/'+p[1]+'/'+p[0]; })() : '—';
             return `<tr>
               <td class="mono">${l.sku}</td>
               <td>${l.nombre}</td>
               <td>${l.talla}</td>
               <td class="num">${pedida}</td>
+              <td class="num" style="color:${totalRecibido>0?'var(--green)':'var(--text-faint)'};font-weight:${totalRecibido>0?'600':'400'}">${totalRecibido}</td>
               <td style="text-align:center">
-                <input type="number" class="recibida-input" id="rec-${o.numero}-${l.sku}-${l.talla}"
-                  value="${recibida}" min="0" max="${pedida}"
-                  ${esCerrada?'disabled':''}
-                  style="${completo?'color:var(--green)':''}">
-              </td>
-              <td style="text-align:center">
-                <input type="number" class="rechazada-input" id="rech-${o.numero}-${l.sku}-${l.talla}"
-                  value="0" min="0" max="${pendiente}"
-                  ${esCerrada?'disabled':''}
-                  placeholder="0">
+                <div style="display:flex;align-items:center;gap:4px;justify-content:center">
+                  <input type="number" class="recibida-input" id="rec-${o.numero}-${l.sku}-${l.talla}"
+                    value="" min="0" max="${pendiente}" placeholder="0"
+                    ${esCerrada?'disabled':''}>
+                  ${!esCerrada && pendiente > 0 ? `<button class="btn btn-sm" style="padding:3px 7px;font-size:10px" onclick="marcarLineaCompleta('${o.numero}','${l.sku}','${l.talla}',${pendiente})" title="Marcar ${pendiente} uds como recibidas">✓</button>` : ''}
+                </div>
               </td>
               <td class="num" style="color:${pendiente>0?'var(--yellow)':'var(--green)'}">${pendiente}</td>
+              <td style="text-align:center;font-size:11px;color:var(--text-muted);font-family:'DM Mono',monospace">${ultimaFecha}</td>
             </tr>`;
           }).join('')}</tbody>
         </table>
@@ -1336,8 +1346,7 @@ function renderOrdenes() {
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-top:1rem">
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             ${!esCerrada ? `
-              <button class="btn btn-sm" onclick="marcarTodoRecibido('${o.numero}')">Marcar todo recibido</button>
-              <button class="btn btn-sm" onclick="guardarRecepcion('${o.numero}')">Guardar recepcion</button>
+              <button class="btn btn-sm" onclick="guardarRecepcionNueva('${o.numero}')">Guardar recepcion</button>
               <button class="btn btn-sm btn-primary" onclick="confirmarCerrarOrden('${o.numero}')">Cerrar orden</button>
             ` : '<span style="font-size:12px;color:var(--green)">Orden cerrada</span>'}
             <button class="btn btn-sm" onclick="descargarPDFOrden('${o.numero}')">
@@ -1361,25 +1370,31 @@ function toggleOC(numero) {
   document.getElementById(`oc-body-${numero}`).classList.toggle('open');
 }
 
-function marcarTodoRecibido(numero) {
-  const lineas = allLineasOC.filter(l => l.numero === numero);
-  lineas.forEach(l => {
-    const input = document.getElementById(`rec-${numero}-${l.sku}-${l.talla}`);
-    if (input) input.value = l.cantidadPedida;
-  });
+function marcarLineaCompleta(numero, sku, talla, pendiente) {
+  const input = document.getElementById(`rec-${numero}-${sku}-${talla}`);
+  if (input) input.value = pendiente;
 }
 
-async function guardarRecepcion(numero) {
+async function guardarRecepcionNueva(numero) {
   const lineas = allLineasOC.filter(l => l.numero === numero);
-  const recepciones = lineas.map(l => {
-    const recInput = document.getElementById(`rec-${numero}-${l.sku}-${l.talla}`);
-    const rechInput = document.getElementById(`rech-${numero}-${l.sku}-${l.talla}`);
-    const recibida = parseInt(recInput?.value) || 0;
-    const rechazada = parseInt(rechInput?.value) || 0;
-    return { numero, sku: l.sku, talla: l.talla, cantidadRecibida: recibida + rechazada };
-  });
+  const recepciones = lineas
+    .map(l => {
+      const input = document.getElementById(`rec-${numero}-${l.sku}-${l.talla}`);
+      const cantidad = parseInt(input?.value) || 0;
+      return { numero, sku: l.sku, talla: l.talla, cantidad };
+    })
+    .filter(r => r.cantidad > 0);
+
+  if (!recepciones.length) {
+    alert('Introduce al menos una cantidad antes de guardar');
+    return;
+  }
+
   try {
-    const res = await fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify({ tipo: 'recepcion', numero, recepciones }) });
+    const res = await fetch(SCRIPT_URL, {
+      method: 'POST',
+      body: JSON.stringify({ tipo: 'recepcion_nueva', numero, recepciones })
+    });
     const data = await res.json();
     if (data.ok) {
       await loadOrdenes();
@@ -1573,10 +1588,11 @@ async function loadData() {
   document.getElementById('last-update').textContent = 'Actualizando...';
   document.getElementById('tabla-body').innerHTML = '<tr><td colspan="13"><div class="loading-state"><div class="spinner"></div>Cargando datos...</div></td></tr>';
   try {
-    const [csvRes, ocRes, inboundRes] = await Promise.all([
+    const [csvRes, ocRes, inboundRes, recRes] = await Promise.all([
       fetch(CSV_URL + '&t=' + Date.now()),
       fetch(`${SCRIPT_URL}?tipo=get_ordenes`),
-      fetch(`${SCRIPT_URL}?tipo=get_inbound`)
+      fetch(`${SCRIPT_URL}?tipo=get_inbound`),
+      fetch(`${SCRIPT_URL}?tipo=get_recepciones`)
     ]);
     const text = await csvRes.text();
     window._allDataFull = parseCSV(text).map(mapRow).filter(r => r.sku);
@@ -1590,6 +1606,11 @@ async function loadData() {
     try {
       const inboundData = await inboundRes.json();
       if (inboundData.ok) inboundStock = inboundData.inbound || {};
+    } catch(e) {}
+
+    try {
+      const recData = await recRes.json();
+      if (recData.ok) allRecepciones = recData.recepciones || [];
     } catch(e) {}
 
     updateScores(allData);

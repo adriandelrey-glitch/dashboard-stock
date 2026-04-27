@@ -456,7 +456,7 @@ const PAGE_SIZE = 50;
 const cantidadesRar = {};
 const cantidadesSancar = {};
 let pendientesOC = {};
-let noReponer = JSON.parse(localStorage.getItem('noReponer') || '{}');
+let noReponer = {};
 let inboundStock = {};
 let allOrdenes = [], allLineasOC = [], allRecepciones = [];
 
@@ -973,26 +973,33 @@ function generarPDF(prov) {
   // ── TABLA DE PRODUCTOS ────────────────────────────────────
   doc.autoTable({
     startY: y + 4,
-    head: [['SKU', 'Producto', 'Talla', 'Cantidad']],
-    body: lineas.map(r => [r.sku, r.nombre, r.talla, r.cantidad]),
-    headStyles: {
-      fillColor: [20, 20, 20],
-      textColor: [255, 255, 255],
-      fontStyle: 'bold',
-      fontSize: 8,
-      cellPadding: 5
-    },
-    bodyStyles: { fontSize: 8.5, textColor: [40, 40, 40], cellPadding: 4 },
+    head: [['', 'SKU', 'Producto', 'Talla', 'Cantidad']],
+    body: lineas.map(r => ['', r.sku, r.nombre, r.talla, r.cantidad]),
+    headStyles: { fillColor: [20, 20, 20], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8, cellPadding: 5 },
+    bodyStyles: { fontSize: 8.5, textColor: [40, 40, 40], cellPadding: 4, minCellHeight: 14 },
     alternateRowStyles: { fillColor: [248, 248, 248] },
     columnStyles: {
-      0: { cellWidth: 38 },
-      1: { cellWidth: 95 },
-      2: { cellWidth: 22, halign: 'center' },
-      3: { cellWidth: 22, halign: 'center', fontStyle: 'bold' }
+      0: { cellWidth: 16 },
+      1: { cellWidth: 36 },
+      2: { cellWidth: 85 },
+      3: { cellWidth: 20, halign: 'center' },
+      4: { cellWidth: 20, halign: 'center', fontStyle: 'bold' }
     },
     margin: { left: M, right: M },
+    didDrawCell: (data) => {
+      if (data.column.index === 0 && data.row.section === 'body') {
+        const r = lineas[data.row.index];
+        if (r && r.imagen) {
+          try {
+            const ix = data.cell.x + 1;
+            const iy = data.cell.y + 1;
+            const size = Math.min(data.cell.height - 2, 12);
+            doc.addImage(r.imagen, 'JPEG', ix, iy, size, size);
+          } catch(e) {}
+        }
+      }
+    },
     didDrawPage: (d) => {
-      // Pie de pagina
       doc.setFontSize(7);
       doc.setTextColor(180, 180, 180);
       doc.text(`Pagina ${d.pageNumber}`, R, 290, { align: 'right' });
@@ -1018,16 +1025,22 @@ function generarPDF(prov) {
 // ── NO REPONER ────────────────────────────────────────────────
 let nrSortCol = 'sku', nrSortAsc = true;
 
-function toggleReponer(key, reponer) {
+async function toggleReponer(key, reponer) {
   if (reponer) {
     delete noReponer[key];
   } else {
     noReponer[key] = true;
   }
-  try { localStorage.setItem('noReponer', JSON.stringify(noReponer)); } catch(e) {}
   updateNRBadge();
   applyFilters();
   renderNoReponer();
+  // Guardar en Sheets
+  try {
+    await fetch(SCRIPT_URL, {
+      method: 'POST',
+      body: JSON.stringify({ tipo: 'set_noreponer', keys: Object.keys(noReponer) })
+    });
+  } catch(e) { console.error('Error guardando noReponer:', e); }
 }
 
 function updateNRBadge() {
@@ -1172,16 +1185,31 @@ function descargarPDFOrden(numero) {
 
   doc.autoTable({
     startY: y + 4,
-    head: [['SKU', 'Producto', 'Talla', 'Cantidad']],
-    body: lineas.map(l => [l.sku, l.nombre, l.talla, parseInt(l.cantidadPedida)||0]),
+    head: [['', 'SKU', 'Producto', 'Talla', 'Cantidad']],
+    body: lineas.map(l => ['', l.sku, l.nombre, l.talla, parseInt(l.cantidadPedida)||0]),
     headStyles: { fillColor: [20,20,20], textColor: [255,255,255], fontStyle: 'bold', fontSize: 8, cellPadding: 5 },
-    bodyStyles: { fontSize: 8.5, textColor: [40,40,40], cellPadding: 4 },
+    bodyStyles: { fontSize: 8.5, textColor: [40,40,40], cellPadding: 4, minCellHeight: 14 },
     alternateRowStyles: { fillColor: [248,248,248] },
     columnStyles: {
-      0: { cellWidth: 38 },
-      1: { cellWidth: 95 },
-      2: { cellWidth: 22, halign: 'center' },
-      3: { cellWidth: 22, halign: 'center', fontStyle: 'bold' }
+      0: { cellWidth: 16 },
+      1: { cellWidth: 36 },
+      2: { cellWidth: 85 },
+      3: { cellWidth: 20, halign: 'center' },
+      4: { cellWidth: 20, halign: 'center', fontStyle: 'bold' }
+    },
+    didDrawCell: (data) => {
+      if (data.column.index === 0 && data.row.section === 'body') {
+        const l = lineas[data.row.index];
+        const r = allData.find(d => d.sku === l.sku) || window._allDataFull?.find(d => d.sku === l.sku);
+        if (r && r.imagen) {
+          try {
+            const x = data.cell.x + 1;
+            const y = data.cell.y + 1;
+            const size = Math.min(data.cell.height - 2, 12);
+            doc.addImage(r.imagen, 'JPEG', x, y, size, size);
+          } catch(e) {}
+        }
+      }
     },
     margin: { left: M, right: M },
     didDrawPage: (d) => {
@@ -1588,11 +1616,12 @@ async function loadData() {
   document.getElementById('last-update').textContent = 'Actualizando...';
   document.getElementById('tabla-body').innerHTML = '<tr><td colspan="13"><div class="loading-state"><div class="spinner"></div>Cargando datos...</div></td></tr>';
   try {
-    const [csvRes, ocRes, inboundRes, recRes] = await Promise.all([
+    const [csvRes, ocRes, inboundRes, recRes, nrRes] = await Promise.all([
       fetch(CSV_URL + '&t=' + Date.now()),
       fetch(`${SCRIPT_URL}?tipo=get_ordenes`),
       fetch(`${SCRIPT_URL}?tipo=get_inbound`),
-      fetch(`${SCRIPT_URL}?tipo=get_recepciones`)
+      fetch(`${SCRIPT_URL}?tipo=get_recepciones`),
+      fetch(`${SCRIPT_URL}?tipo=get_noreponer`)
     ]);
     const text = await csvRes.text();
     window._allDataFull = parseCSV(text).map(mapRow).filter(r => r.sku);
@@ -1611,6 +1640,14 @@ async function loadData() {
     try {
       const recData = await recRes.json();
       if (recData.ok) allRecepciones = recData.recepciones || [];
+    } catch(e) {}
+
+    try {
+      const nrData = await nrRes.json();
+      if (nrData.ok) {
+        noReponer = {};
+        (nrData.keys || []).forEach(k => { noReponer[k] = true; });
+      }
     } catch(e) {}
 
     updateScores(allData);

@@ -974,18 +974,18 @@ function generarPDF(prov) {
   // ── TABLA DE PRODUCTOS ────────────────────────────────────
   doc.autoTable({
     startY: y + 4,
-    head: [['', 'SKU', 'EAN', 'Producto', 'Talla', 'Cant.']],
+    head: [['', 'SKU', 'EAN', 'Producto', 'Talla', 'Qty']],
     body: lineas.map(r => ['', r.sku, r.ean || '', r.nombre, r.talla, r.cantidad]),
     headStyles: { fillColor: [20, 20, 20], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8, cellPadding: 5 },
     bodyStyles: { fontSize: 8.5, textColor: [40, 40, 40], cellPadding: 4, minCellHeight: 14 },
     alternateRowStyles: { fillColor: [248, 248, 248] },
     columnStyles: {
       0: { cellWidth: 14 },
-      1: { cellWidth: 30 },
-      2: { cellWidth: 30 },
-      3: { cellWidth: 65 },
+      1: { cellWidth: 28, overflow: 'ellipsize' },
+      2: { cellWidth: 28, overflow: 'ellipsize' },
+      3: { cellWidth: 55 },
       4: { cellWidth: 18, halign: 'center' },
-      5: { cellWidth: 15, halign: 'center', fontStyle: 'bold' }
+      5: { cellWidth: 14, halign: 'center', fontStyle: 'bold' }
     },
     margin: { left: M, right: M },
     didDrawCell: (data) => {
@@ -1187,7 +1187,7 @@ function descargarPDFOrden(numero) {
 
   doc.autoTable({
     startY: y + 4,
-    head: [['', 'SKU', 'EAN', 'Producto', 'Talla', 'Cant.']],
+    head: [['', 'SKU', 'EAN', 'Producto', 'Talla', 'Qty']],
     body: lineas.map(l => {
       const r = allData.find(d => d.sku === l.sku) || window._allDataFull?.find(d => d.sku === l.sku);
       return ['', l.sku, r?.ean || '', l.nombre, l.talla, parseInt(l.cantidadPedida)||0];
@@ -1197,11 +1197,11 @@ function descargarPDFOrden(numero) {
     alternateRowStyles: { fillColor: [248,248,248] },
     columnStyles: {
       0: { cellWidth: 14 },
-      1: { cellWidth: 30 },
-      2: { cellWidth: 30 },
-      3: { cellWidth: 65 },
+      1: { cellWidth: 28, overflow: 'ellipsize' },
+      2: { cellWidth: 28, overflow: 'ellipsize' },
+      3: { cellWidth: 55 },
       4: { cellWidth: 18, halign: 'center' },
-      5: { cellWidth: 15, halign: 'center', fontStyle: 'bold' }
+      5: { cellWidth: 14, halign: 'center', fontStyle: 'bold' }
     },
     didDrawCell: (data) => {
       if (data.column.index === 0 && data.row.section === 'body') {

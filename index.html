@@ -1579,11 +1579,8 @@ function cargarArchivoSancar(input) {
       if (file.name.endsWith('.csv')) {
         // Parsear CSV
         const text = e.target.result;
-        const lines = text.split('
-').filter(l => l.trim());
-        const headers = lines[0].split('	').map(h => h.trim().replace(/"/g,''));
-        // Intentar con coma si no hay tabs
-        const sep = headers.length > 1 ? '	' : ',';
+        const lines = text.split('\n').filter(l => l.trim());
+        const sep = text.split('\n')[0].includes('\t') ? '\t' : ',';
         const hdrs = lines[0].split(sep).map(h => h.trim().replace(/"/g,''));
         rows = lines.slice(1).map(line => {
           const vals = line.split(sep).map(v => v.trim().replace(/"/g,''));

@@ -8,6 +8,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
@@ -225,6 +226,7 @@
     <button class="tab-btn active" onclick="switchTab('stock')">Stock</button>
     <button class="tab-btn" onclick="switchTab('noreponer')">No reponer <span id="nr-badge" style="display:none;background:var(--text-muted);color:white;font-size:10px;padding:1px 6px;border-radius:100px;margin-left:4px"></span></button>
     <button class="tab-btn" onclick="switchTab('ordenes')">Ordenes de compra <span id="oc-badge" style="display:none;background:var(--accent);color:white;font-size:10px;padding:1px 6px;border-radius:100px;margin-left:4px"></span></button>
+    <button class="tab-btn" onclick="switchTab('produccion')">Produccion SANCAR</button>
   </div>
 
   <!-- TAB STOCK -->
@@ -430,6 +432,65 @@
 
   </div>
 
+  <!-- TAB PRODUCCION SANCAR -->
+  <div class="tab-content" id="tab-produccion">
+
+    <div class="section-head" style="margin-bottom:1.25rem">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span class="section-title">Produccion SANCAR</span>
+        <span class="count-pill" id="prod-count">0 referencias</span>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <label class="btn" style="cursor:pointer" for="prod-file-input">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 2v8M5 7l3 3 3-3M2 12h12" stroke="currentColor" stroke-width="1.3"/></svg>
+          Subir Excel / CSV de SANCAR
+        </label>
+        <input type="file" id="prod-file-input" accept=".csv,.xlsx,.xls" style="display:none" onchange="cargarArchivoSancar(this)">
+        <button class="btn btn-primary" id="btn-pdf-produccion" onclick="generarPDFProduccion()" disabled>
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M4 1h6l4 4v10H4V1z" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>
+          Descargar PDF para SANCAR
+        </button>
+      </div>
+    </div>
+
+    <div id="prod-scorecards" style="display:none" class="scorecards">
+      <div class="card red"><div class="card-label">Prioridad alta</div><div class="card-value" id="prod-sc-alta">—</div><div class="card-sub">menos de 30 dias</div></div>
+      <div class="card yellow"><div class="card-label">Prioridad media</div><div class="card-value" id="prod-sc-media">—</div><div class="card-sub">30 a 90 dias</div></div>
+      <div class="card green"><div class="card-label">Sin urgencia</div><div class="card-value" id="prod-sc-baja">—</div><div class="card-sub">mas de 90 dias</div></div>
+      <div class="card"><div class="card-label">Total unidades</div><div class="card-value" id="prod-sc-uds" style="font-size:22px">—</div><div class="card-sub">pendientes produccion</div></div>
+      <div class="card"><div class="card-label">Sin datos stock</div><div class="card-value" id="prod-sc-sin" style="color:var(--text-faint)">—</div><div class="card-sub">SKU no encontrado</div></div>
+    </div>
+
+    <div id="prod-empty" style="text-align:center;padding:4rem 2rem;color:var(--text-faint)">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" style="margin:0 auto 1rem;display:block;opacity:0.3"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z" stroke="currentColor" stroke-width="1.5"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" stroke="currentColor" stroke-width="1.5"/></svg>
+      <p style="font-size:14px;font-weight:500;margin-bottom:6px">Sube el archivo de SANCAR para calcular prioridades</p>
+      <p style="font-size:12px">Formatos aceptados: CSV o Excel (.xlsx)</p>
+    </div>
+
+    <div class="table-container" id="prod-table-container" style="display:none">
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th style="text-align:center;width:32px">#</th>
+              <th>SKU</th>
+              <th>Style</th>
+              <th>Order Nr.</th>
+              <th style="text-align:right">Balance QTY</th>
+              <th style="text-align:right">Stock actual</th>
+              <th style="text-align:right">Dias stock</th>
+              <th style="text-align:right">Venta/mes</th>
+              <th style="text-align:right">Stock futuro</th>
+              <th style="text-align:center">Prioridad</th>
+            </tr>
+          </thead>
+          <tbody id="prod-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
 </div>
 
 <!-- Confirm dialog -->
@@ -462,7 +523,7 @@ let allOrdenes = [], allLineasOC = [], allRecepciones = [];
 
 // ── TABS ──────────────────────────────────────────────────────
 function switchTab(tab) {
-  document.querySelectorAll('.tab-btn').forEach((b,i) => b.classList.toggle('active', ['stock','noreponer','ordenes'][i] === tab));
+  document.querySelectorAll('.tab-btn').forEach((b,i) => b.classList.toggle('active', ['stock','noreponer','ordenes','produccion'][i] === tab));
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.add('active');
   if (tab === 'ordenes') loadOrdenes();
@@ -1502,6 +1563,260 @@ function renderExpandRow(r) {
       </tr>`).join('')}</tbody>
     </table>
   </div></div></td></tr>`;
+}
+
+// ── PRODUCCION SANCAR ─────────────────────────────────────────
+let produccionData = [];
+
+function cargarArchivoSancar(input) {
+  const file = input.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      let rows = [];
+      if (file.name.endsWith('.csv')) {
+        // Parsear CSV
+        const text = e.target.result;
+        const lines = text.split('
+').filter(l => l.trim());
+        const headers = lines[0].split('	').map(h => h.trim().replace(/"/g,''));
+        // Intentar con coma si no hay tabs
+        const sep = headers.length > 1 ? '	' : ',';
+        const hdrs = lines[0].split(sep).map(h => h.trim().replace(/"/g,''));
+        rows = lines.slice(1).map(line => {
+          const vals = line.split(sep).map(v => v.trim().replace(/"/g,''));
+          const obj = {};
+          hdrs.forEach((h, i) => obj[h] = vals[i] || '');
+          return obj;
+        });
+      } else {
+        // Parsear Excel — saltar fila 2 que SANCAR usa como cabecera secundaria
+        const wb = XLSX.read(e.target.result, { type: 'binary' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const allRows = XLSX.utils.sheet_to_json(ws, { defval: '', header: 1 });
+        const headers = allRows[0]; // Fila 1 = cabeceras reales
+        // Fila 2 es la extra de SANCAR, datos desde fila 3
+        rows = allRows.slice(2).filter(r => r[5]).map(r => {
+          const obj = {};
+          headers.forEach((h, i) => obj[String(h)] = r[i] !== undefined ? r[i] : '');
+          return obj;
+        });
+      }
+      procesarProduccionSancar(rows);
+    } catch(err) {
+      alert('Error al leer el archivo: ' + err.message);
+    }
+  };
+
+  if (file.name.endsWith('.csv')) {
+    reader.readAsText(file);
+  } else {
+    reader.readAsBinaryString(file);
+  }
+}
+
+function procesarProduccionSancar(rows) {
+  // Filtrar filas con Balance QTY > 0
+  const sancarRows = rows.filter(r => {
+    const bal = parseFloat(r['Balance QTY'] || r['Balance'] || 0);
+    return bal > 0;
+  });
+
+  // Cruzar con datos de stock
+  const allDataRef = window._allDataFull || allData;
+
+  produccionData = sancarRows.map(r => {
+    const sku = String(r['Style Nr.'] || r['Style Nr'] || '').trim().replace(/\s+/g, '');
+    const stockItem = allDataRef.find(d => d.sku === sku);
+    const balanceQty = parseFloat(r['Balance QTY'] || r['Balance'] || 0);
+    const ventaMes = stockItem ? stockItem.venta : 0;
+    const stockActual = stockItem ? stockItem.stock : null;
+    const futuro = stockItem ? stockFuturo(stockItem) : null;
+    const ventaDiaria = ventaMes / 30;
+    const diasStock = (futuro !== null && ventaDiaria > 0) ? futuro / ventaDiaria : (futuro === 0 ? 0 : 999);
+
+    // Puntuación: cuanto mayor, más urgente
+    // Si no hay stock = máxima urgencia
+    let puntuacion = 0;
+    if (stockItem) {
+      if (diasStock === 0) puntuacion = 99999;
+      else if (ventaDiaria > 0) puntuacion = (1 / diasStock) * ventaMes;
+      else puntuacion = 0;
+    } else {
+      puntuacion = -1; // Sin datos
+    }
+
+    return {
+      sku,
+      style: r['Style'] || '',
+      orderNr: r['Sancar Order Nr.'] || r['Sancar Order Nr'] || '',
+      customerOrderNr: r['Customer Order Nr.'] || r['Customer Order Nr'] || '',
+      deliveryDate: r['Delivery Date'] || '',
+      orderQty: parseFloat(r['Order QTY'] || 0),
+      deliveredQty: parseFloat(r['Delivered QTY'] || 0),
+      balanceQty,
+      stockActual,
+      futuro,
+      ventaMes,
+      diasStock,
+      puntuacion,
+      encontrado: !!stockItem
+    };
+  });
+
+  // Ordenar: primero los encontrados por puntuación desc, luego los no encontrados
+  produccionData.sort((a, b) => {
+    if (!a.encontrado && b.encontrado) return 1;
+    if (a.encontrado && !b.encontrado) return -1;
+    return b.puntuacion - a.puntuacion;
+  });
+
+  renderProduccion();
+}
+
+function prioridadClass(dias) {
+  if (dias <= 30) return 'badge-red';
+  if (dias <= 90) return 'badge-yellow';
+  return 'badge-green';
+}
+
+function prioridadLabel(dias, encontrado) {
+  if (!encontrado) return '⚪ Sin datos';
+  if (dias <= 30) return '🔴 Alta';
+  if (dias <= 90) return '🟡 Media';
+  return '🟢 Baja';
+}
+
+function renderProduccion() {
+  if (!produccionData.length) return;
+
+  const alta = produccionData.filter(r => r.encontrado && r.diasStock <= 30).length;
+  const media = produccionData.filter(r => r.encontrado && r.diasStock > 30 && r.diasStock <= 90).length;
+  const baja = produccionData.filter(r => r.encontrado && r.diasStock > 90).length;
+  const sinDatos = produccionData.filter(r => !r.encontrado).length;
+  const totalUds = produccionData.reduce((s, r) => s + r.balanceQty, 0);
+
+  document.getElementById('prod-sc-alta').textContent = alta;
+  document.getElementById('prod-sc-media').textContent = media;
+  document.getElementById('prod-sc-baja').textContent = baja;
+  document.getElementById('prod-sc-sin').textContent = sinDatos;
+  document.getElementById('prod-sc-uds').textContent = Math.round(totalUds).toLocaleString('es-ES');
+  document.getElementById('prod-count').textContent = `${produccionData.length} referencias`;
+  document.getElementById('prod-scorecards').style.display = 'grid';
+  document.getElementById('prod-empty').style.display = 'none';
+  document.getElementById('prod-table-container').style.display = 'block';
+  document.getElementById('btn-pdf-produccion').disabled = false;
+
+  document.getElementById('prod-body').innerHTML = produccionData.map((r, i) => `
+    <tr style="${!r.encontrado ? 'opacity:0.6' : ''}">
+      <td style="text-align:center;font-family:'DM Mono',monospace;font-size:11px;color:var(--text-faint)">${i+1}</td>
+      <td class="mono">${r.sku}</td>
+      <td title="${r.style}">${r.style}</td>
+      <td class="mono" style="font-size:11px">${r.orderNr}</td>
+      <td class="num" style="font-weight:600;color:var(--accent)">${Math.round(r.balanceQty)}</td>
+      <td class="num">${r.stockActual !== null ? Math.round(r.stockActual) : '—'}</td>
+      <td class="num" style="color:${r.diasStock <= 30 ? 'var(--red)' : r.diasStock <= 90 ? 'var(--yellow)' : 'var(--green)'}">
+        ${r.encontrado ? (r.diasStock >= 999 ? '∞' : Math.round(r.diasStock)) : '—'}
+      </td>
+      <td class="num">${r.encontrado ? r.ventaMes.toFixed(1) : '—'}</td>
+      <td class="num" style="color:var(--accent)">${r.futuro !== null ? Math.round(r.futuro) : '—'}</td>
+      <td style="text-align:center"><span class="badge ${prioridadClass(r.diasStock)}">${prioridadLabel(r.diasStock, r.encontrado)}</span></td>
+    </tr>
+  `).join('');
+}
+
+function generarPDFProduccion() {
+  if (!produccionData.length) return;
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'landscape' });
+  const W = 297, M = 14, R = 283;
+  const raw = new Date();
+  const fecha = `${String(raw.getDate()).padStart(2,'0')}/${String(raw.getMonth()+1).padStart(2,'0')}/${raw.getFullYear()}`;
+
+  // Cabecera negra
+  doc.setFillColor(20, 20, 20);
+  doc.rect(0, 0, W, 22, 'F');
+  try {
+    doc.addImage(LOGO_B64, 'PNG', M, 5, 8*3.077, 8);
+  } catch(e) {}
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(255,255,255);
+  doc.text('PRIORIDADES DE PRODUCCION — SANCAR', R, 10, { align: 'right' });
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(180,180,180);
+  doc.text(`Generado: ${fecha}`, R, 17, { align: 'right' });
+
+  // Resumen
+  let y = 30;
+  const alta = produccionData.filter(r => r.encontrado && r.diasStock <= 30).length;
+  const media = produccionData.filter(r => r.encontrado && r.diasStock > 30 && r.diasStock <= 90).length;
+  const baja = produccionData.filter(r => r.encontrado && r.diasStock > 90).length;
+  const cols = [
+    { label: 'Prioridad alta', value: String(alta) },
+    { label: 'Prioridad media', value: String(media) },
+    { label: 'Sin urgencia', value: String(baja) },
+    { label: 'Total referencias', value: String(produccionData.length) },
+  ];
+  const colW = (R - M) / cols.length;
+  cols.forEach((c, i) => {
+    const x = M + i * colW;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(130,130,130);
+    doc.text(c.label.toUpperCase(), x, y);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.setTextColor(20,20,20);
+    doc.text(c.value, x, y+7);
+  });
+
+  y += 15;
+  doc.setDrawColor(220,220,220); doc.line(M, y, R, y);
+
+  doc.autoTable({
+    startY: y + 4,
+    head: [['#', 'SKU', 'Style', 'Order Nr.', 'Balance QTY', 'Stock', 'Dias stock', 'Venta/mes', 'Prioridad']],
+    body: produccionData.map((r, i) => [
+      i+1,
+      r.sku,
+      r.style,
+      r.orderNr,
+      Math.round(r.balanceQty),
+      r.stockActual !== null ? Math.round(r.stockActual) : '—',
+      r.encontrado ? (r.diasStock >= 999 ? 'Sin ventas' : Math.round(r.diasStock)) : '—',
+      r.encontrado ? r.ventaMes.toFixed(1) : '—',
+      prioridadLabel(r.diasStock, r.encontrado).replace(/[🔴🟡🟢⚪]/g, '').trim()
+    ]),
+    headStyles: { fillColor: [20,20,20], textColor: [255,255,255], fontStyle: 'bold', fontSize: 7.5, cellPadding: 4 },
+    bodyStyles: { fontSize: 7.5, textColor: [40,40,40], cellPadding: 3 },
+    alternateRowStyles: { fillColor: [248,248,248] },
+    columnStyles: {
+      0: { cellWidth: 10, halign: 'center' },
+      1: { cellWidth: 35 },
+      2: { cellWidth: 60 },
+      3: { cellWidth: 30 },
+      4: { cellWidth: 22, halign: 'right', fontStyle: 'bold' },
+      5: { cellWidth: 20, halign: 'right' },
+      6: { cellWidth: 22, halign: 'right' },
+      7: { cellWidth: 22, halign: 'right' },
+      8: { cellWidth: 22, halign: 'center' }
+    },
+    margin: { left: M, right: M },
+    didDrawCell: (data) => {
+      if (data.column.index === 8 && data.row.section === 'body') {
+        const r = produccionData[data.row.index];
+        if (!r) return;
+        let color = [42, 122, 59]; // verde
+        if (!r.encontrado) color = [150,150,150];
+        else if (r.diasStock <= 30) color = [193, 48, 48];
+        else if (r.diasStock <= 90) color = [154, 94, 0];
+        doc.setTextColor(...color);
+      }
+    },
+    didDrawPage: (d) => {
+      doc.setFontSize(7); doc.setTextColor(180,180,180);
+      doc.text(`Pagina ${d.pageNumber}`, R, 205, { align: 'right' });
+      doc.text('Sporcks — Prioridades de Produccion SANCAR', M, 205);
+    }
+  });
+
+  doc.save(`Prioridades_SANCAR_${fecha.replace(/\//g,'-')}.pdf`);
 }
 
 // ── CONFIRM DIALOG ────────────────────────────────────────────

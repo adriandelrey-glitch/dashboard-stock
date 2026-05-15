@@ -1934,20 +1934,42 @@ function applySortAndRender() {
 
 // ── LOAD ──────────────────────────────────────────────────────
 async function loadData() {
-  document.getElementById('last-update').textContent = 'Actualizando...';
-  document.getElementById('tabla-body').innerHTML = '<tr><td colspan="13"><div class="loading-state"><div class="spinner"></div>Cargando datos...</div></td></tr>';
+  document.getElementById('last-update').textContent = 'Cargando stock...';
+  document.getElementById('tabla-body').innerHTML = '<tr><td colspan="13"><div class="loading-state"><div class="spinner"></div>Cargando datos de stock...</div></td></tr>';
+
+  // FASE 1 — CSV primero (rapido)
   try {
-    const [csvRes, ocRes, inboundRes, recRes, nrRes] = await Promise.all([
-      fetch(CSV_URL + '&t=' + Date.now()),
+    const csvRes = await fetch(CSV_URL + '&t=' + Date.now());
+    const text = await csvRes.text();
+    window._allDataFull = parseCSV(text).map(mapRow).filter(r => r.sku);
+    allData = window._allDataFull.filter(r => r.reponer.toUpperCase() !== 'NO');
+    updateScores(allData);
+    populateFilter('f-estado', allData.map(r=>calcularEstado(r)));
+    populateFilter('f-proveedor', allData.flatMap(r=>r.proveedor.split(',').map(p=>p.trim())));
+    populateFilter('f-deporte', allData.map(r=>r.deporte));
+    populateFilter('f-coleccion', allData.map(r=>r.coleccion));
+    filtered = [...allData];
+    sortBy('dias');
+    renderChart(allData);
+    updateOrdenBtn();
+    updateNRBadge();
+    document.getElementById('last-update').textContent = `${allData.length} referencias — cargando OC e inbound...`;
+    document.getElementById('update-time').textContent = `Actualizado: ${new Date().toLocaleTimeString('es-ES')}`;
+    document.getElementById('th-dias').classList.add('active');
+  } catch(e) {
+    document.getElementById('last-update').textContent = 'Error al cargar los datos';
+    document.getElementById('tabla-body').innerHTML = `<tr><td colspan="13"><div class="error-state">No se pudo conectar con Google Sheets.</div></td></tr>`;
+    return;
+  }
+
+  // FASE 2 — Apps Script en segundo plano (mas lento)
+  try {
+    const [ocRes, inboundRes, recRes, nrRes] = await Promise.all([
       fetch(`${SCRIPT_URL}?tipo=get_ordenes`),
       fetch(`${SCRIPT_URL}?tipo=get_inbound`),
       fetch(`${SCRIPT_URL}?tipo=get_recepciones`),
       fetch(`${SCRIPT_URL}?tipo=get_noreponer`)
     ]);
-    const text = await csvRes.text();
-    window._allDataFull = parseCSV(text).map(mapRow).filter(r => r.sku);
-    allData = window._allDataFull.filter(r => r.reponer.toUpperCase() !== 'NO');
-
     try {
       const ocData = await ocRes.json();
       if (ocData.ok) { allOrdenes = ocData.ordenes||[]; allLineasOC = ocData.lineas||[]; calcularPendientesOC(); calcularPedidosDesdeOC(); updateOCBadge(); }
@@ -1971,23 +1993,14 @@ async function loadData() {
       }
     } catch(e) {}
 
+    applySortAndRender();
     updateScores(allData);
-    populateFilter('f-estado', allData.map(r=>calcularEstado(r)));
-    populateFilter('f-proveedor', allData.flatMap(r=>r.proveedor.split(',').map(p=>p.trim())));
-    populateFilter('f-deporte', allData.map(r=>r.deporte));
-    populateFilter('f-coleccion', allData.map(r=>r.coleccion));
-    filtered = [...allData];
-    sortBy('dias');
-    renderChart(allData);
     updateOrdenBtn();
-    const now = new Date();
     updateNRBadge();
     document.getElementById('last-update').textContent = `${allData.length} referencias cargadas`;
-    document.getElementById('update-time').textContent = `Actualizado: ${now.toLocaleTimeString('es-ES')}`;
-    document.getElementById('th-dias').classList.add('active');
+    document.getElementById('update-time').textContent = `Actualizado: ${new Date().toLocaleTimeString('es-ES')}`;
   } catch(e) {
-    document.getElementById('last-update').textContent = 'Error al cargar los datos';
-    document.getElementById('tabla-body').innerHTML = `<tr><td colspan="13"><div class="error-state">No se pudo conectar con Google Sheets.</div></td></tr>`;
+    document.getElementById('last-update').textContent = `${allData.length} referencias (OC no disponible)`;
   }
 }
 

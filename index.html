@@ -252,6 +252,13 @@
       <select id="f-deporte" onchange="applyFilters()"><option value="">Todos</option></select>
       <label>Coleccion</label>
       <select id="f-coleccion" onchange="applyFilters()"><option value="">Todas</option></select>
+      <label>Urgencia</label>
+      <select id="f-urgencia" onchange="applyFilters()">
+        <option value="">Todas</option>
+        <option value="red">Urgente</option>
+        <option value="yellow">Avisar</option>
+        <option value="green">OK</option>
+      </select>
       <button class="btn" onclick="resetFilters()" style="margin-left:auto">Limpiar filtros</button>
     </div>
 
@@ -286,7 +293,7 @@
               <th class="no-sort sancar-col" style="text-align:center">Cant. SANCAR</th>
               <th class="no-sort" style="text-align:center">Reponer</th>
               <th onclick="sortBy('estado')" id="th-estado">Estado</th>
-              <th class="no-sort" style="text-align:center" title="Urgencia proveedor">Prov.</th>
+              <th class="no-sort" style="text-align:center">Urgencia</th>
             </tr>
           </thead>
           <tbody id="tabla-body">
@@ -778,27 +785,23 @@ function renderTable(data) {
           <span class="toggle-slider"></span>
         </label>
       </td>
-      <td>
-        <span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;white-space:nowrap">
-          <span style="width:8px;height:8px;border-radius:50%;flex-shrink:0;background:${
-            calcularEstado(r).includes('Reponer ya') ? 'var(--red)' :
-            calcularEstado(r).includes('Reponer pronto') ? '#D4860A' :
-            calcularEstado(r).includes('OK') ? 'var(--green)' : 'var(--text-faint)'
-          }"></span>
-          ${calcularEstado(r).replace(/[🔴🟡🟢⚪]/g,'').trim()}
-        </span>
+      <td style="text-align:center">
+        <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${
+          calcularEstado(r).includes('Reponer ya') ? 'var(--red)' :
+          calcularEstado(r).includes('Reponer pronto') ? '#D4860A' :
+          calcularEstado(r).includes('OK') ? 'var(--green)' : 'var(--text-faint)'
+        }" title="${calcularEstado(r).replace(/[🔴🟡🟢⚪]/g,'').trim()}"></span>
       </td>
-      <td>
-        <span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;white-space:nowrap">
-          <span style="width:8px;height:8px;border-radius:50%;flex-shrink:0;background:${
-            calcularUrgenciaProveedor(r) === 'red' ? 'var(--red)' :
-            calcularUrgenciaProveedor(r) === 'yellow' ? '#D4860A' :
-            calcularUrgenciaProveedor(r) === 'green' ? 'var(--green)' : 'var(--text-faint)'
-          }"></span>
-          ${calcularUrgenciaProveedor(r) === 'red' ? 'Urgente' :
-            calcularUrgenciaProveedor(r) === 'yellow' ? 'Avisar' :
-            calcularUrgenciaProveedor(r) === 'green' ? 'OK' : 'Sin ventas'}
-        </span>
+      <td style="text-align:center">
+        <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${
+          calcularUrgenciaProveedor(r) === 'red' ? 'var(--red)' :
+          calcularUrgenciaProveedor(r) === 'yellow' ? '#D4860A' :
+          calcularUrgenciaProveedor(r) === 'green' ? 'var(--green)' : 'var(--text-faint)'
+        }" title="${
+          calcularUrgenciaProveedor(r) === 'red' ? 'Urgente' :
+          calcularUrgenciaProveedor(r) === 'yellow' ? 'Avisar' :
+          calcularUrgenciaProveedor(r) === 'green' ? 'OK' : 'Sin ventas'
+        }"></span>
       </td>
     </tr>${isExpanded ? renderExpandRow(r) : ''}`;
   }).join('');
@@ -1921,6 +1924,7 @@ function applyFilters() {
   const proveedor = document.getElementById('f-proveedor').value;
   const deporte = document.getElementById('f-deporte').value;
   const coleccion = document.getElementById('f-coleccion').value;
+  const urgencia = document.getElementById('f-urgencia').value;
   filtered = allData.filter(r => {
     if (noReponer[rowKey(r)]) return false;
     if (search && !r.sku.toLowerCase().includes(search) && !r.nombre.toLowerCase().includes(search)) return false;
@@ -1928,6 +1932,7 @@ function applyFilters() {
     if (proveedor && !r.proveedor.includes(proveedor)) return false;
     if (deporte && r.deporte !== deporte) return false;
     if (coleccion && r.coleccion !== coleccion) return false;
+    if (urgencia && calcularUrgenciaProveedor(r) !== urgencia) return false;
     return true;
   });
   applySortAndRender();
@@ -1935,7 +1940,7 @@ function applyFilters() {
 
 function resetFilters() {
   document.getElementById('f-search').value = '';
-  ['f-estado','f-proveedor','f-deporte','f-coleccion'].forEach(id => document.getElementById(id).value = '');
+  ['f-estado','f-proveedor','f-deporte','f-coleccion','f-urgencia'].forEach(id => document.getElementById(id).value = '');
   applyFilters();
 }
 

@@ -75,7 +75,7 @@
 
   .table-container { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 1.5rem; }
   .table-scroll { overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 1000px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 1280px; }
   thead th { background: var(--surface2); padding: 10px 12px; text-align: left; font-size: 11px; font-weight: 600; letter-spacing: 0.4px; text-transform: uppercase; color: var(--text-faint); border-bottom: 1px solid var(--border); white-space: nowrap; cursor: pointer; user-select: none; transition: color 0.15s; }
   thead th:hover { color: var(--text); }
   thead th.active { color: var(--accent); }
@@ -583,8 +583,9 @@ function inboundUnidades(r) {
 // ── URGENCIA PROVEEDOR ───────────────────────────────────────
 function calcularUrgenciaProveedor(r) {
   if (!r.venta || r.venta === 0) return 'gray';
-  if (r.stock < r.venta) return 'red';
-  if (r.stock < r.venta * 2) return 'yellow';
+  const stockDisponible = r.stock + (inboundStock[r.sku] || 0);
+  if (stockDisponible < r.venta) return 'red';
+  if (stockDisponible < r.venta * 2) return 'yellow';
   return 'green';
 }
 
@@ -777,17 +778,27 @@ function renderTable(data) {
           <span class="toggle-slider"></span>
         </label>
       </td>
-      <td><span class="badge ${estadoClassDashboard(r)}">${calcularEstado(r)}</span></td>
-      <td style="text-align:center">
-        <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${
-          calcularUrgenciaProveedor(r) === 'red' ? 'var(--red)' :
-          calcularUrgenciaProveedor(r) === 'yellow' ? '#D4860A' :
-          calcularUrgenciaProveedor(r) === 'green' ? 'var(--green)' : 'var(--text-faint)'
-        }" title="${
-          calcularUrgenciaProveedor(r) === 'red' ? 'Urgente' :
-          calcularUrgenciaProveedor(r) === 'yellow' ? 'Avisar' :
-          calcularUrgenciaProveedor(r) === 'green' ? 'OK' : 'Sin ventas'
-        }"></span>
+      <td>
+        <span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;white-space:nowrap">
+          <span style="width:8px;height:8px;border-radius:50%;flex-shrink:0;background:${
+            calcularEstado(r).includes('Reponer ya') ? 'var(--red)' :
+            calcularEstado(r).includes('Reponer pronto') ? '#D4860A' :
+            calcularEstado(r).includes('OK') ? 'var(--green)' : 'var(--text-faint)'
+          }"></span>
+          ${calcularEstado(r).replace(/[🔴🟡🟢⚪]/g,'').trim()}
+        </span>
+      </td>
+      <td>
+        <span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;white-space:nowrap">
+          <span style="width:8px;height:8px;border-radius:50%;flex-shrink:0;background:${
+            calcularUrgenciaProveedor(r) === 'red' ? 'var(--red)' :
+            calcularUrgenciaProveedor(r) === 'yellow' ? '#D4860A' :
+            calcularUrgenciaProveedor(r) === 'green' ? 'var(--green)' : 'var(--text-faint)'
+          }"></span>
+          ${calcularUrgenciaProveedor(r) === 'red' ? 'Urgente' :
+            calcularUrgenciaProveedor(r) === 'yellow' ? 'Avisar' :
+            calcularUrgenciaProveedor(r) === 'green' ? 'OK' : 'Sin ventas'}
+        </span>
       </td>
     </tr>${isExpanded ? renderExpandRow(r) : ''}`;
   }).join('');

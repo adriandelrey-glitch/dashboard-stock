@@ -286,10 +286,11 @@
               <th class="no-sort sancar-col" style="text-align:center">Cant. SANCAR</th>
               <th class="no-sort" style="text-align:center">Reponer</th>
               <th onclick="sortBy('estado')" id="th-estado">Estado</th>
+              <th class="no-sort" style="text-align:center" title="Urgencia proveedor">Prov.</th>
             </tr>
           </thead>
           <tbody id="tabla-body">
-            <tr><td colspan="13"><div class="loading-state"><div class="spinner"></div>Cargando datos...</div></td></tr>
+            <tr><td colspan="14"><div class="loading-state"><div class="spinner"></div>Cargando datos...</div></td></tr>
           </tbody>
         </table>
       </div>
@@ -579,6 +580,14 @@ function inboundUnidades(r) {
   return inboundStock[r.sku] || 0;
 }
 
+// ── URGENCIA PROVEEDOR ───────────────────────────────────────
+function calcularUrgenciaProveedor(r) {
+  if (!r.venta || r.venta === 0) return 'gray';
+  if (r.stock < r.venta) return 'red';
+  if (r.stock < r.venta * 2) return 'yellow';
+  return 'green';
+}
+
 // ── ESTADO CALCULADO EN DASHBOARD ────────────────────────────
 function calcularEstado(r) {
   const venta = r.venta || 0;
@@ -703,7 +712,7 @@ function renderTable(data) {
   document.getElementById('count-label').textContent = `${data.length} referencias`;
   const tbody = document.getElementById('tabla-body');
   if (!data.length) {
-    tbody.innerHTML = '<tr><td colspan="13"><div class="empty-state">No hay resultados</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="14"><div class="empty-state">No hay resultados</div></td></tr>';
     document.getElementById('page-info').textContent = '—';
     document.getElementById('page-btns').innerHTML = '';
     return;
@@ -769,6 +778,17 @@ function renderTable(data) {
         </label>
       </td>
       <td><span class="badge ${estadoClassDashboard(r)}">${calcularEstado(r)}</span></td>
+      <td style="text-align:center">
+        <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${
+          calcularUrgenciaProveedor(r) === 'red' ? 'var(--red)' :
+          calcularUrgenciaProveedor(r) === 'yellow' ? '#D4860A' :
+          calcularUrgenciaProveedor(r) === 'green' ? 'var(--green)' : 'var(--text-faint)'
+        }" title="${
+          calcularUrgenciaProveedor(r) === 'red' ? 'Urgente' :
+          calcularUrgenciaProveedor(r) === 'yellow' ? 'Avisar' :
+          calcularUrgenciaProveedor(r) === 'green' ? 'OK' : 'Sin ventas'
+        }"></span>
+      </td>
     </tr>${isExpanded ? renderExpandRow(r) : ''}`;
   }).join('');
 
@@ -1534,11 +1554,11 @@ function renderExpandRow(r) {
   const ocs = getOCsDeProducto(r.sku);
   const totalPendiente = ocs.reduce((s, o) => s + o.pendiente, 0);
   if (!ocs.length) {
-    return `<tr class="expand-row"><td colspan="13"><div class="expand-content open"><div class="expand-inner">
+    return `<tr class="expand-row"><td colspan="14"><div class="expand-content open"><div class="expand-inner">
       <div class="expand-title">${r.sku} — Sin ordenes activas</div>
     </div></div></td></tr>`;
   }
-  return `<tr class="expand-row"><td colspan="13"><div class="expand-content open"><div class="expand-inner">
+  return `<tr class="expand-row"><td colspan="14"><div class="expand-content open"><div class="expand-inner">
     <div class="expand-title">${r.sku} — ${ocs.length} linea${ocs.length>1?'s':''} en ordenes activas · ${totalPendiente} uds pendientes</div>
     <table class="expand-table">
       <thead><tr>
@@ -1932,7 +1952,7 @@ function applySortAndRender() {
 // ── LOAD ──────────────────────────────────────────────────────
 async function loadData() {
   document.getElementById('last-update').textContent = 'Cargando stock...';
-  document.getElementById('tabla-body').innerHTML = '<tr><td colspan="13"><div class="loading-state"><div class="spinner"></div>Cargando datos de stock...</div></td></tr>';
+  document.getElementById('tabla-body').innerHTML = '<tr><td colspan="14"><div class="loading-state"><div class="spinner"></div>Cargando datos de stock...</div></td></tr>';
 
   // FASE 1 — CSV primero (rapido)
   try {
@@ -1955,7 +1975,7 @@ async function loadData() {
     document.getElementById('th-dias').classList.add('active');
   } catch(e) {
     document.getElementById('last-update').textContent = 'Error al cargar los datos';
-    document.getElementById('tabla-body').innerHTML = `<tr><td colspan="13"><div class="error-state">No se pudo conectar con Google Sheets.</div></td></tr>`;
+    document.getElementById('tabla-body').innerHTML = `<tr><td colspan="14"><div class="error-state">No se pudo conectar con Google Sheets.</div></td></tr>`;
     return;
   }
 

@@ -462,9 +462,9 @@
     </div>
 
     <div id="prod-scorecards" style="display:none" class="scorecards">
-      <div class="card red"><div class="card-label">Prioridad alta</div><div class="card-value" id="prod-sc-alta">—</div><div class="card-sub">menos de 30 dias</div></div>
-      <div class="card yellow"><div class="card-label">Prioridad media</div><div class="card-value" id="prod-sc-media">—</div><div class="card-sub">30 a 90 dias</div></div>
-      <div class="card green"><div class="card-label">Sin urgencia</div><div class="card-value" id="prod-sc-baja">—</div><div class="card-sub">mas de 90 dias</div></div>
+      <div class="card red"><div class="card-label">Prioridad alta</div><div class="card-value" id="prod-sc-alta">—</div><div class="card-sub">menos de 2 meses stock</div></div>
+      <div class="card yellow"><div class="card-label">Prioridad media</div><div class="card-value" id="prod-sc-media">—</div><div class="card-sub">entre 2 y 3 meses</div></div>
+      <div class="card green"><div class="card-label">Sin urgencia</div><div class="card-value" id="prod-sc-baja">—</div><div class="card-sub">mas de 3 meses stock</div></div>
       <div class="card"><div class="card-label">Total unidades</div><div class="card-value" id="prod-sc-uds" style="font-size:22px">—</div><div class="card-sub">pendientes produccion</div></div>
       <div class="card"><div class="card-label">Sin datos stock</div><div class="card-value" id="prod-sc-sin" style="color:var(--text-faint)">—</div><div class="card-sub">SKU no encontrado</div></div>
     </div>
@@ -1750,9 +1750,9 @@ function prioridadLabel(r) {
 function renderProduccion() {
   if (!produccionData.length) return;
 
-  const alta = produccionData.filter(r => r.encontrado && r.diasStock <= 30).length;
-  const media = produccionData.filter(r => r.encontrado && r.diasStock > 30 && r.diasStock <= 90).length;
-  const baja = produccionData.filter(r => r.encontrado && r.diasStock > 90).length;
+  const alta = produccionData.filter(r => prioridadNivel(r) === 'alta').length;
+  const media = produccionData.filter(r => prioridadNivel(r) === 'media').length;
+  const baja = produccionData.filter(r => prioridadNivel(r) === 'baja').length;
   const sinDatos = produccionData.filter(r => !r.encontrado).length;
   const totalUds = produccionData.reduce((s, r) => s + r.balanceQty, 0);
 
@@ -1814,9 +1814,9 @@ function generarPDFProduccion() {
 
   // Resumen
   let y = 30;
-  const alta = produccionData.filter(r => r.encontrado && r.diasStock <= 30).length;
-  const media = produccionData.filter(r => r.encontrado && r.diasStock > 30 && r.diasStock <= 90).length;
-  const baja = produccionData.filter(r => r.encontrado && r.diasStock > 90).length;
+  const alta = produccionData.filter(r => prioridadNivel(r) === 'alta').length;
+  const media = produccionData.filter(r => prioridadNivel(r) === 'media').length;
+  const baja = produccionData.filter(r => prioridadNivel(r) === 'baja').length;
   const cols = [
     { label: 'Prioridad alta', value: String(alta) },
     { label: 'Prioridad media', value: String(media) },
@@ -1842,7 +1842,6 @@ function generarPDFProduccion() {
   produccionData.forEach((r, i) => {
     // Fila principal del SKU
     pdfRows.push([
-      '', // imagen se dibuja en didDrawCell
       i+1,
       r.sku,
       r.style,
@@ -1854,24 +1853,23 @@ function generarPDFProduccion() {
     // Subfilas por OC
     r.lineas.forEach(l => {
       const fechaStr = l.deliveryDate || '';
-      pdfRows.push(['', '', `  ↳ ${l.customerOrderNr}`, fechaStr, Math.round(l.balanceQty), '']);
+      pdfRows.push(['', `  ↳ ${l.customerOrderNr}`, fechaStr, Math.round(l.balanceQty), '']);
       pdfRowMeta.push({ tipo: 'oc', skuIdx: i });
     });
   });
 
   doc.autoTable({
     startY: y + 4,
-    head: [['', '#', 'SKU / OC', 'Model / Date', 'Cantidad', 'Prioridad']],
+    head: [['#', 'SKU / OC', 'Model / Date', 'Cantidad', 'Prioridad']],
     body: pdfRows,
     headStyles: { fillColor: [20,20,20], textColor: [255,255,255], fontStyle: 'bold', fontSize: 7.5, cellPadding: 4 },
     bodyStyles: { fontSize: 7.5, textColor: [40,40,40], cellPadding: 3 },
     columnStyles: {
-      0: { cellWidth: 12 },  // imagen
-      1: { cellWidth: 10, halign: 'center' }, // #
-      2: { cellWidth: 38 },  // SKU/OC
-      3: { cellWidth: 88 },  // Model/Date
-      4: { cellWidth: 18, halign: 'right', fontStyle: 'bold' }, // Cantidad
-      5: { cellWidth: 16, halign: 'center' }  // Prioridad
+      0: { cellWidth: 10, halign: 'center' }, // #
+      1: { cellWidth: 42 },  // SKU/OC
+      2: { cellWidth: 96 },  // Model/Date
+      3: { cellWidth: 18, halign: 'right', fontStyle: 'bold' }, // Cantidad
+      4: { cellWidth: 16, halign: 'center' }  // Prioridad
     },
     margin: { left: M, right: M },
     didParseCell: (data) => {
@@ -1893,20 +1891,8 @@ function generarPDFProduccion() {
     didDrawCell: (data) => {
       const meta = pdfRowMeta[data.row.index];
       if (!meta || data.row.section !== 'body') return;
-      // Imagen en columna 0 solo para filas SKU
-      if (data.column.index === 0 && meta.tipo === 'sku') {
-        const r = meta.r;
-        const allDataRef = window._allDataFull || allData;
-        const stockItem = allDataRef.find(d => d.sku === r.sku);
-        if (stockItem && stockItem.imagen) {
-          try {
-            const size = Math.min(data.cell.height - 2, 10);
-            doc.addImage(stockItem.imagen, 'JPEG', data.cell.x + 1, data.cell.y + 1, size, size);
-          } catch(e) {}
-        }
-      }
-      // Color prioridad en columna 5
-      if (data.column.index === 5 && meta.tipo === 'sku') {
+      // Color prioridad en columna 4
+      if (data.column.index === 4 && meta.tipo === 'sku') {
         const r = meta.r;
         const n = prioridadNivel(r);
         let color = [42, 122, 59];

@@ -481,14 +481,9 @@
           <thead>
             <tr>
               <th style="text-align:center;width:32px">#</th>
-              <th>SKU</th>
-              <th>Style</th>
-              <th>Order Nr.</th>
-              <th style="text-align:right">Balance QTY</th>
-              <th style="text-align:right">Stock actual</th>
-              <th style="text-align:right">Dias stock</th>
-              <th style="text-align:right">Venta/mes</th>
-              <th style="text-align:right">Stock futuro</th>
+              <th>SKU / OC</th>
+              <th>Model / Date</th>
+              <th style="text-align:right">Cantidad</th>
               <th style="text-align:center">Prioridad</th>
             </tr>
           </thead>
@@ -1623,13 +1618,19 @@ function cargarArchivoSancar(input) {
           return obj;
         });
       } else {
-        // Parsear Excel — saltar fila 2 que SANCAR usa como cabecera secundaria
+        // Parsear Excel — filtrar filas vacías y cabeceras secundarias de SANCAR
         const wb = XLSX.read(e.target.result, { type: 'binary' });
         const ws = wb.Sheets[wb.SheetNames[0]];
         const allRows = XLSX.utils.sheet_to_json(ws, { defval: '', header: 1 });
         const headers = allRows[0]; // Fila 1 = cabeceras reales
-        // Fila 2 es la extra de SANCAR, datos desde fila 3
-        rows = allRows.slice(2).filter(r => r[5]).map(r => {
+        rows = allRows.slice(1).filter(r => {
+          const first = String(r[0] || '').trim();
+          // Ignorar filas vacías o que contengan "Delivery Date"
+          if (!first || first.toLowerCase().includes('delivery date')) return false;
+          // Ignorar filas sin SKU
+          if (!r[5] || String(r[5]).trim() === '') return false;
+          return true;
+        }).map(r => {
           const obj = {};
           headers.forEach((h, i) => obj[String(h)] = r[i] !== undefined ? r[i] : '');
           return obj;
@@ -1648,56 +1649,71 @@ function cargarArchivoSancar(input) {
   }
 }
 
-function procesarProduccionSancar(rows) {
-  // Filtrar filas con Balance QTY > 0
-  const sancarRows = rows.filter(r => {
-    const bal = parseFloat(r['Balance QTY'] || r['Balance'] || 0);
-    return bal > 0;
-  });
+function parsearFechaExcel(val) {
+  if (!val) return '';
+  // Si ya es string con formato fecha
+  if (typeof val === 'string') return val.slice(0,10);
+  // Si es número serial de Excel (días desde 1900)
+  if (typeof val === 'number') {
+    const date = new Date(Math.round((val - 25569) * 86400 * 1000));
+    const d = String(date.getUTCDate()).padStart(2,'0');
+    const m = String(date.getUTCMonth()+1).padStart(2,'0');
+    const y = date.getUTCFullYear();
+    return `${d}/${m}/${y}`;
+  }
+  // Si es objeto Date
+  if (val instanceof Date) {
+    const d = String(val.getDate()).padStart(2,'0');
+    const m = String(val.getMonth()+1).padStart(2,'0');
+    return `${d}/${m}/${val.getFullYear()}`;
+  }
+  return String(val).slice(0,10);
+}
 
-  // Cruzar con datos de stock
+function procesarProduccionSancar(rows) {
+  const sancarRows = rows.filter(r => parseFloat(r['Balance QTY'] || 0) > 0);
   const allDataRef = window._allDataFull || allData;
 
-  produccionData = sancarRows.map(r => {
+  // Agrupar por SKU
+  const porSku = {};
+  sancarRows.forEach(r => {
     const sku = String(r['Style Nr.'] || r['Style Nr'] || '').trim().replace(/\s+/g, '');
-    const stockItem = allDataRef.find(d => d.sku === sku);
-    const balanceQty = parseFloat(r['Balance QTY'] || r['Balance'] || 0);
-    const ventaMes = stockItem ? stockItem.venta : 0;
-    const stockActual = stockItem ? stockItem.stock : null;
-    const futuro = stockItem ? stockFuturo(stockItem) : null;
-    const ventaDiaria = ventaMes / 30;
-    const diasStock = (futuro !== null && ventaDiaria > 0) ? futuro / ventaDiaria : (futuro === 0 ? 0 : 999);
+    if (!sku) return;
+    const balanceQty = parseFloat(r['Balance QTY'] || 0);
+    const customerOrderNr = r['Customer Order Nr.'] || r['Customer Order Nr'] || '';
 
-    // Puntuación: cuanto mayor, más urgente
-    // Si no hay stock = máxima urgencia
-    let puntuacion = 0;
-    if (stockItem) {
-      if (diasStock === 0) puntuacion = 99999;
-      else if (ventaDiaria > 0) puntuacion = (1 / diasStock) * ventaMes;
-      else puntuacion = 0;
-    } else {
-      puntuacion = -1; // Sin datos
+    const deliveryDate = parsearFechaExcel(r['Delivery Date']);
+    if (!porSku[sku]) {
+      const stockItem = allDataRef.find(d => d.sku === sku);
+      const ventaMes = stockItem ? stockItem.venta : 0;
+      const stockActual = stockItem ? stockItem.stock : null;
+      const futuro = stockItem ? stockFuturo(stockItem) : null;
+      const ventaDiaria = ventaMes / 30;
+      const diasStock = (futuro !== null && ventaDiaria > 0) ? futuro / ventaDiaria : (futuro === 0 ? 0 : 999);
+      const stockDisp = (stockActual || 0) + (inboundStock[sku] || 0);
+      let puntuacion = 0;
+      if (stockItem) {
+        if (stockDisp === 0 && ventaMes > 0) puntuacion = 99999;
+        else if (ventaMes > 0) puntuacion = ventaMes / Math.max(stockDisp, 0.1);
+      } else { puntuacion = -1; }
+
+      porSku[sku] = {
+        sku,
+        style: r['Style'] || '',
+        balanceQtyTotal: 0,
+        lineas: [],
+        stockActual, futuro, ventaMes, diasStock, puntuacion,
+        encontrado: !!stockItem
+      };
     }
 
-    return {
-      sku,
-      style: r['Style'] || '',
-      orderNr: r['Sancar Order Nr.'] || r['Sancar Order Nr'] || '',
-      customerOrderNr: r['Customer Order Nr.'] || r['Customer Order Nr'] || '',
-      deliveryDate: r['Delivery Date'] || '',
-      orderQty: parseFloat(r['Order QTY'] || 0),
-      deliveredQty: parseFloat(r['Delivered QTY'] || 0),
-      balanceQty,
-      stockActual,
-      futuro,
-      ventaMes,
-      diasStock,
-      puntuacion,
-      encontrado: !!stockItem
-    };
+    porSku[sku].balanceQtyTotal += balanceQty;
+    porSku[sku].lineas.push({ customerOrderNr, balanceQty, deliveryDate });
   });
 
-  // Ordenar: primero los encontrados por puntuación desc, luego los no encontrados
+  produccionData = Object.values(porSku);
+
+  // Ordenar: encontrados por puntuación desc, luego no encontrados
   produccionData.sort((a, b) => {
     if (!a.encontrado && b.encontrado) return 1;
     if (a.encontrado && !b.encontrado) return -1;
@@ -1707,17 +1723,28 @@ function procesarProduccionSancar(rows) {
   renderProduccion();
 }
 
-function prioridadClass(dias) {
-  if (dias <= 30) return 'badge-red';
-  if (dias <= 90) return 'badge-yellow';
-  return 'badge-green';
+function prioridadNivel(r) {
+  if (!r.encontrado || !r.ventaMes) return 'sin_datos';
+  const stockDisp = (r.stockActual || 0) + (inboundStock[r.sku] || 0);
+  if (stockDisp < r.ventaMes * 2) return 'alta';   // menos de 2 meses = urgente
+  if (stockDisp < r.ventaMes * 3) return 'media';  // entre 2 y 3 meses = avisar
+  return 'baja';
 }
 
-function prioridadLabel(dias, encontrado) {
-  if (!encontrado) return '⚪ Sin datos';
-  if (dias <= 30) return '🔴 Alta';
-  if (dias <= 90) return '🟡 Media';
-  return '🟢 Baja';
+function prioridadClass(r) {
+  const n = prioridadNivel(r);
+  if (n === 'alta') return 'badge-red';
+  if (n === 'media') return 'badge-yellow';
+  if (n === 'baja') return 'badge-green';
+  return 'badge-gray';
+}
+
+function prioridadLabel(r) {
+  const n = prioridadNivel(r);
+  if (n === 'alta') return 'Alta';
+  if (n === 'media') return 'Media';
+  if (n === 'baja') return 'Baja';
+  return 'Sin datos';
 }
 
 function renderProduccion() {
@@ -1740,29 +1767,37 @@ function renderProduccion() {
   document.getElementById('prod-table-container').style.display = 'block';
   document.getElementById('btn-pdf-produccion').disabled = false;
 
-  document.getElementById('prod-body').innerHTML = produccionData.map((r, i) => `
-    <tr style="${!r.encontrado ? 'opacity:0.6' : ''}">
+  document.getElementById('prod-body').innerHTML = produccionData.map((r, i) => {
+    const subRows = r.lineas.map(l => {
+      const fechaStr = l.deliveryDate || '';
+      return `<tr style="background:var(--surface2)">
+        <td></td>
+        <td style="padding-left:2rem;font-size:11px;color:var(--text-muted);font-family:'DM Mono',monospace">
+          <span style="color:var(--text-faint);margin-right:6px">↳</span>${l.customerOrderNr}
+        </td>
+        <td style="font-size:11px;color:var(--text-faint)">${fechaStr}</td>
+        <td class="num" style="font-size:11px;color:var(--text-muted)">${Math.round(l.balanceQty)}</td>
+        <td></td>
+      </tr>`;
+    }).join('');
+
+    return `
+    <tr style="${!r.encontrado ? 'opacity:0.6' : ''};border-top:2px solid var(--border)">
       <td style="text-align:center;font-family:'DM Mono',monospace;font-size:11px;color:var(--text-faint)">${i+1}</td>
-      <td class="mono">${r.sku}</td>
-      <td title="${r.style}">${r.style}</td>
-      <td class="mono" style="font-size:11px">${r.orderNr}</td>
-      <td class="num" style="font-weight:600;color:var(--accent)">${Math.round(r.balanceQty)}</td>
-      <td class="num">${r.stockActual !== null ? Math.round(r.stockActual) : '—'}</td>
-      <td class="num" style="color:${r.diasStock <= 30 ? 'var(--red)' : r.diasStock <= 90 ? 'var(--yellow)' : 'var(--green)'}">
-        ${r.encontrado ? (r.diasStock >= 999 ? '∞' : Math.round(r.diasStock)) : '—'}
-      </td>
-      <td class="num">${r.encontrado ? r.ventaMes.toFixed(1) : '—'}</td>
-      <td class="num" style="color:var(--accent)">${r.futuro !== null ? Math.round(r.futuro) : '—'}</td>
-      <td style="text-align:center"><span class="badge ${prioridadClass(r.diasStock)}">${prioridadLabel(r.diasStock, r.encontrado)}</span></td>
+      <td class="mono" style="font-weight:500">${r.sku}</td>
+      <td title="${r.style}" style="max-width:300px">${r.style}</td>
+      <td class="num" style="font-weight:700;color:var(--accent)">${Math.round(r.balanceQtyTotal)}</td>
+      <td style="text-align:center"><span class="badge ${prioridadClass(r)}">${prioridadLabel(r)}</span></td>
     </tr>
-  `).join('');
+    ${subRows}`;
+  }).join('');
 }
 
 function generarPDFProduccion() {
   if (!produccionData.length) return;
   const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ orientation: 'landscape' });
-  const W = 297, M = 14, R = 283;
+  const doc = new jsPDF({ orientation: 'portrait' });
+  const W = 210, M = 14, R = 196;
   const raw = new Date();
   const fecha = `${String(raw.getDate()).padStart(2,'0')}/${String(raw.getMonth()+1).padStart(2,'0')}/${raw.getFullYear()}`;
 
@@ -1800,50 +1835,91 @@ function generarPDFProduccion() {
   y += 15;
   doc.setDrawColor(220,220,220); doc.line(M, y, R, y);
 
-  doc.autoTable({
-    startY: y + 4,
-    head: [['#', 'SKU', 'Style', 'Order Nr.', 'Balance QTY', 'Stock', 'Dias stock', 'Venta/mes', 'Prioridad']],
-    body: produccionData.map((r, i) => [
+  // Construir filas del PDF: fila principal por SKU + subfilas por OC
+  const pdfRows = [];
+  const pdfRowMeta = []; // para colorear prioridad correctamente
+
+  produccionData.forEach((r, i) => {
+    // Fila principal del SKU
+    pdfRows.push([
+      '', // imagen se dibuja en didDrawCell
       i+1,
       r.sku,
       r.style,
-      r.orderNr,
-      Math.round(r.balanceQty),
-      r.stockActual !== null ? Math.round(r.stockActual) : '—',
-      r.encontrado ? (r.diasStock >= 999 ? 'Sin ventas' : Math.round(r.diasStock)) : '—',
-      r.encontrado ? r.ventaMes.toFixed(1) : '—',
-      prioridadLabel(r.diasStock, r.encontrado).replace(/[🔴🟡🟢⚪]/g, '').trim()
-    ]),
+      Math.round(r.balanceQtyTotal),
+      prioridadLabel(r)
+    ]);
+    pdfRowMeta.push({ tipo: 'sku', r, skuIdx: i });
+
+    // Subfilas por OC
+    r.lineas.forEach(l => {
+      const fechaStr = l.deliveryDate || '';
+      pdfRows.push(['', '', `  ↳ ${l.customerOrderNr}`, fechaStr, Math.round(l.balanceQty), '']);
+      pdfRowMeta.push({ tipo: 'oc', skuIdx: i });
+    });
+  });
+
+  doc.autoTable({
+    startY: y + 4,
+    head: [['', '#', 'SKU / OC', 'Model / Date', 'Cantidad', 'Prioridad']],
+    body: pdfRows,
     headStyles: { fillColor: [20,20,20], textColor: [255,255,255], fontStyle: 'bold', fontSize: 7.5, cellPadding: 4 },
     bodyStyles: { fontSize: 7.5, textColor: [40,40,40], cellPadding: 3 },
-    alternateRowStyles: { fillColor: [248,248,248] },
     columnStyles: {
-      0: { cellWidth: 10, halign: 'center' },
-      1: { cellWidth: 35 },
-      2: { cellWidth: 60 },
-      3: { cellWidth: 30 },
-      4: { cellWidth: 22, halign: 'right', fontStyle: 'bold' },
-      5: { cellWidth: 20, halign: 'right' },
-      6: { cellWidth: 22, halign: 'right' },
-      7: { cellWidth: 22, halign: 'right' },
-      8: { cellWidth: 22, halign: 'center' }
+      0: { cellWidth: 12 },  // imagen
+      1: { cellWidth: 10, halign: 'center' }, // #
+      2: { cellWidth: 38 },  // SKU/OC
+      3: { cellWidth: 88 },  // Model/Date
+      4: { cellWidth: 18, halign: 'right', fontStyle: 'bold' }, // Cantidad
+      5: { cellWidth: 16, halign: 'center' }  // Prioridad
     },
     margin: { left: M, right: M },
+    didParseCell: (data) => {
+      const meta = pdfRowMeta[data.row.index];
+      if (!meta) return;
+      const skuIdx = meta.skuIdx !== undefined ? meta.skuIdx : -1;
+      const bgColor = skuIdx % 2 === 0 ? [255,255,255] : [245,245,245];
+      if (meta.tipo === 'oc') {
+        data.cell.styles.fillColor = bgColor;
+        data.cell.styles.textColor = [130, 130, 130];
+        data.cell.styles.fontSize = 6.5;
+        data.cell.styles.fontStyle = 'italic';
+      } else {
+        data.cell.styles.fillColor = bgColor;
+        data.cell.styles.fontStyle = 'bold';
+        data.cell.styles.fontSize = 7.5;
+      }
+    },
     didDrawCell: (data) => {
-      if (data.column.index === 8 && data.row.section === 'body') {
-        const r = produccionData[data.row.index];
-        if (!r) return;
-        let color = [42, 122, 59]; // verde
-        if (!r.encontrado) color = [150,150,150];
-        else if (r.diasStock <= 30) color = [193, 48, 48];
-        else if (r.diasStock <= 90) color = [154, 94, 0];
+      const meta = pdfRowMeta[data.row.index];
+      if (!meta || data.row.section !== 'body') return;
+      // Imagen en columna 0 solo para filas SKU
+      if (data.column.index === 0 && meta.tipo === 'sku') {
+        const r = meta.r;
+        const allDataRef = window._allDataFull || allData;
+        const stockItem = allDataRef.find(d => d.sku === r.sku);
+        if (stockItem && stockItem.imagen) {
+          try {
+            const size = Math.min(data.cell.height - 2, 10);
+            doc.addImage(stockItem.imagen, 'JPEG', data.cell.x + 1, data.cell.y + 1, size, size);
+          } catch(e) {}
+        }
+      }
+      // Color prioridad en columna 5
+      if (data.column.index === 5 && meta.tipo === 'sku') {
+        const r = meta.r;
+        const n = prioridadNivel(r);
+        let color = [42, 122, 59];
+        if (n === 'alta') color = [193, 48, 48];
+        else if (n === 'media') color = [154, 94, 0];
+        else if (n === 'sin_datos') color = [150,150,150];
         doc.setTextColor(...color);
       }
     },
     didDrawPage: (d) => {
       doc.setFontSize(7); doc.setTextColor(180,180,180);
-      doc.text(`Pagina ${d.pageNumber}`, R, 205, { align: 'right' });
-      doc.text('Sporcks — Prioridades de Produccion SANCAR', M, 205);
+      doc.text(`Pagina ${d.pageNumber}`, R, 287, { align: 'right' });
+      doc.text('Sporcks — Prioridades de Produccion SANCAR', M, 287);
     }
   });
 

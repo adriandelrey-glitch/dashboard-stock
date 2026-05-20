@@ -1725,17 +1725,18 @@ function procesarProduccionSancar(rows) {
   renderProduccion();
 }
 
-function esXL(sku) {
-  // Detectar talla XL en el SKU — normalmente es el último segmento
-  const partes = sku.toUpperCase().split('-');
-  const talla = partes[partes.length - 1];
-  return talla === 'XL' || talla === 'XXL' || talla === 'XXXL';
+function esXL(r) {
+  // La talla está en el campo Style, no en el SKU
+  // Buscar patrones como "(White.XL)" o "XL" al final del nombre
+  const style = (r.style || '').toUpperCase();
+  return /\.XL[)\s]|\.XXL[)\s]|\.XXXL[)\s]|\.XL$|\.XXL$|\.XXXL$/.test(style) ||
+         /\(.*XL.*\)/.test(style);
 }
 
 function prioridadNivel(r) {
   if (!r.encontrado) return 'sin_datos';
   const stockDisp = (r.stockActual || 0) + (inboundStock[r.sku] || 0);
-  const isXL = esXL(r.sku);
+  const isXL = esXL(r);
   // Regla XL: nunca puede ser Urgent ni High
   if (isXL) return 'media';
   if (!r.ventaMes) return 'sin_datos';
@@ -1868,20 +1869,14 @@ function generarPDFProduccion() {
     },
     margin: { left: M, right: M },
     didParseCell: (data) => {
+      if (data.row.section === 'head') return; // no tocar cabeceras
       const meta = pdfRowMeta[data.row.index];
       if (!meta) return;
       const skuIdx = meta.skuIdx !== undefined ? meta.skuIdx : -1;
       const bgColor = skuIdx % 2 === 0 ? [255,255,255] : [245,245,245];
-      if (meta.tipo === 'oc') {
-        data.cell.styles.fillColor = bgColor;
-        data.cell.styles.textColor = [130, 130, 130];
-        data.cell.styles.fontSize = 6.5;
-        data.cell.styles.fontStyle = 'italic';
-      } else {
-        data.cell.styles.fillColor = bgColor;
-        data.cell.styles.fontStyle = 'bold';
-        data.cell.styles.fontSize = 7.5;
-      }
+      data.cell.styles.fillColor = bgColor;
+      data.cell.styles.fontStyle = 'bold';
+      data.cell.styles.fontSize = 7.5;
     },
     didDrawCell: (data) => {
       const meta = pdfRowMeta[data.row.index];

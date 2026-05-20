@@ -1858,14 +1858,14 @@ function generarPDFProduccion() {
     startY: y + 4,
     head: [['#', 'SKU', 'Model', 'Qty', 'Priority']],
     body: pdfRows,
-    headStyles: { fillColor: [20,20,20], textColor: [255,255,255], fontStyle: 'bold', fontSize: 7.5, cellPadding: 4 },
+    headStyles: { fillColor: [20,20,20], textColor: [255,255,255], fontStyle: 'bold', fontSize: 7.5, cellPadding: 4, halign: 'center' },
     bodyStyles: { fontSize: 7.5, textColor: [40,40,40], cellPadding: 3 },
     columnStyles: {
-      0: { cellWidth: 8, halign: 'center' },  // #
-      1: { cellWidth: 36 },                    // SKU (16 chars)
-      2: { cellWidth: 108 },                   // Model
-      3: { cellWidth: 14, halign: 'right', fontStyle: 'bold' }, // Qty
-      4: { cellWidth: 16, halign: 'center' }   // Priority
+      0: { cellWidth: 10, halign: 'center' },
+      1: { cellWidth: 36 },
+      2: { cellWidth: 102 },
+      3: { cellWidth: 16, halign: 'center', fontStyle: 'bold' },
+      4: { cellWidth: 18, halign: 'center' }
     },
     margin: { left: M, right: M },
     didParseCell: (data) => {

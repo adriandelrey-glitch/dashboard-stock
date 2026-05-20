@@ -75,7 +75,7 @@
 
   .table-container { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 1.5rem; }
   .table-scroll { overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 1280px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 1600px; }
   thead th { background: var(--surface2); padding: 10px 12px; text-align: left; font-size: 11px; font-weight: 600; letter-spacing: 0.4px; text-transform: uppercase; color: var(--text-faint); border-bottom: 1px solid var(--border); white-space: nowrap; cursor: pointer; user-select: none; transition: color 0.15s; }
   thead th:hover { color: var(--text); }
   thead th.active { color: var(--accent); }
@@ -780,10 +780,10 @@ function renderTable(data) {
           : `<span style="color:var(--text-faint);font-size:11px">—</span>`}
       </td>
       <td style="text-align:center" onclick="event.stopPropagation()">
-        <label class="toggle" title="${noReponer[key] ? 'No reponer' : 'Reponer'}">
-          <input type="checkbox" ${noReponer[key] ? '' : 'checked'} onchange="toggleReponer('${key}', this.checked)">
-          <span class="toggle-slider"></span>
-        </label>
+        <span onclick="toggleReponer('${key}', ${noReponer[key] ? 'true' : 'false'})"
+          title="${noReponer[key] ? 'No reponer — click para activar' : 'Reponer — click para desactivar'}"
+          style="display:inline-block;width:10px;height:10px;border-radius:50%;cursor:pointer;background:${noReponer[key] ? 'var(--text-faint)' : 'var(--green)'}">
+        </span>
       </td>
       <td style="text-align:center">
         <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${
@@ -1431,7 +1431,7 @@ function renderOrdenes() {
           <span style="font-size:11px;color:var(--text-faint)">${progreso}%</span>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
-          <span class="badge ${estadoOCClass(o.estado)}">${o.estado}</span>
+          <span class="badge ${progreso === 100 ? 'badge-green' : estadoOCClass(o.estado)}">${progreso === 100 ? 'Completada' : o.estado}</span>
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="color:var(--text-faint)"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5"/></svg>
         </div>
       </div>

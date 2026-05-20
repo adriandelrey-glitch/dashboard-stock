@@ -1837,12 +1837,12 @@ function generarPDFProduccion() {
   y += 15;
   doc.setDrawColor(220,220,220); doc.line(M, y, R, y);
 
-  // Construir filas del PDF: fila principal por SKU + subfilas por OC
+  // Solo Urgent y High en el PDF, sin XL
+  const pdfData = produccionData.filter(r => ['urgent','high'].includes(prioridadNivel(r)));
   const pdfRows = [];
-  const pdfRowMeta = []; // para colorear prioridad correctamente
+  const pdfRowMeta = [];
 
-  produccionData.forEach((r, i) => {
-    // Fila principal del SKU
+  pdfData.forEach((r, i) => {
     pdfRows.push([
       i+1,
       r.sku,
@@ -1851,8 +1851,6 @@ function generarPDFProduccion() {
       prioridadLabel(r)
     ]);
     pdfRowMeta.push({ tipo: 'sku', r, skuIdx: i });
-
-    // Solo totales, sin subfilas de OC
   });
 
   doc.autoTable({

@@ -462,9 +462,9 @@
     </div>
 
     <div id="prod-scorecards" style="display:none" class="scorecards">
-      <div class="card red"><div class="card-label">Prioridad alta</div><div class="card-value" id="prod-sc-alta">—</div><div class="card-sub">menos de 2 meses stock</div></div>
-      <div class="card yellow"><div class="card-label">Prioridad media</div><div class="card-value" id="prod-sc-media">—</div><div class="card-sub">entre 2 y 3 meses</div></div>
-      <div class="card green"><div class="card-label">Sin urgencia</div><div class="card-value" id="prod-sc-baja">—</div><div class="card-sub">mas de 3 meses stock</div></div>
+      <div class="card red"><div class="card-label">Urgent</div><div class="card-value" id="prod-sc-alta">—</div><div class="card-sub">stock a 0</div></div>
+      <div class="card yellow"><div class="card-label">High</div><div class="card-value" id="prod-sc-media">—</div><div class="card-sub">menos de 2 meses</div></div>
+      <div class="card green"><div class="card-label">Media / Baja</div><div class="card-value" id="prod-sc-baja">—</div><div class="card-sub">mas de 2 meses o XL</div></div>
       <div class="card"><div class="card-label">Total unidades</div><div class="card-value" id="prod-sc-uds" style="font-size:22px">—</div><div class="card-sub">pendientes produccion</div></div>
       <div class="card"><div class="card-label">Sin datos stock</div><div class="card-value" id="prod-sc-sin" style="color:var(--text-faint)">—</div><div class="card-sub">SKU no encontrado</div></div>
     </div>
@@ -481,9 +481,9 @@
           <thead>
             <tr>
               <th style="text-align:center;width:32px">#</th>
-              <th>SKU / OC</th>
-              <th>Model / Date</th>
-              <th style="text-align:right">Cantidad</th>
+              <th>SKU</th>
+              <th>Model</th>
+              <th style="text-align:right">Balance QTY</th>
               <th style="text-align:center">Prioridad</th>
             </tr>
           </thead>
@@ -1714,34 +1714,50 @@ function procesarProduccionSancar(rows) {
   produccionData = Object.values(porSku);
 
   // Ordenar: encontrados por puntuación desc, luego no encontrados
+  const ordenNivel = { urgent: 0, high: 1, media: 2, baja: 3, sin_datos: 4 };
   produccionData.sort((a, b) => {
-    if (!a.encontrado && b.encontrado) return 1;
-    if (a.encontrado && !b.encontrado) return -1;
+    const na = ordenNivel[prioridadNivel(a)] ?? 4;
+    const nb = ordenNivel[prioridadNivel(b)] ?? 4;
+    if (na !== nb) return na - nb;
     return b.puntuacion - a.puntuacion;
   });
 
   renderProduccion();
 }
 
+function esXL(sku) {
+  // Detectar talla XL en el SKU — normalmente es el último segmento
+  const partes = sku.toUpperCase().split('-');
+  const talla = partes[partes.length - 1];
+  return talla === 'XL' || talla === 'XXL' || talla === 'XXXL';
+}
+
 function prioridadNivel(r) {
-  if (!r.encontrado || !r.ventaMes) return 'sin_datos';
+  if (!r.encontrado) return 'sin_datos';
   const stockDisp = (r.stockActual || 0) + (inboundStock[r.sku] || 0);
-  if (stockDisp < r.ventaMes * 2) return 'alta';   // menos de 2 meses = urgente
-  if (stockDisp < r.ventaMes * 3) return 'media';  // entre 2 y 3 meses = avisar
+  const isXL = esXL(r.sku);
+  // Regla XL: nunca puede ser Urgent ni High
+  if (isXL) return 'media';
+  if (!r.ventaMes) return 'sin_datos';
+  if (stockDisp === 0) return 'urgent';
+  if (stockDisp < r.ventaMes * 2) return 'high';
+  if (stockDisp < r.ventaMes * 3) return 'media';
   return 'baja';
 }
 
 function prioridadClass(r) {
   const n = prioridadNivel(r);
-  if (n === 'alta') return 'badge-red';
-  if (n === 'media') return 'badge-yellow';
+  if (n === 'urgent') return 'badge-red';
+  if (n === 'high') return 'badge-yellow';
+  if (n === 'media') return 'badge-gray';
   if (n === 'baja') return 'badge-green';
   return 'badge-gray';
 }
 
 function prioridadLabel(r) {
   const n = prioridadNivel(r);
-  if (n === 'alta') return 'Alta';
+  if (n === 'urgent') return 'Urgent';
+  if (n === 'high') return 'High';
   if (n === 'media') return 'Media';
   if (n === 'baja') return 'Baja';
   return 'Sin datos';
@@ -1750,9 +1766,9 @@ function prioridadLabel(r) {
 function renderProduccion() {
   if (!produccionData.length) return;
 
-  const alta = produccionData.filter(r => prioridadNivel(r) === 'alta').length;
-  const media = produccionData.filter(r => prioridadNivel(r) === 'media').length;
-  const baja = produccionData.filter(r => prioridadNivel(r) === 'baja').length;
+  const alta = produccionData.filter(r => prioridadNivel(r) === 'urgent').length;
+  const media = produccionData.filter(r => prioridadNivel(r) === 'high').length;
+  const baja = produccionData.filter(r => ['media','baja'].includes(prioridadNivel(r))).length;
   const sinDatos = produccionData.filter(r => !r.encontrado).length;
   const totalUds = produccionData.reduce((s, r) => s + r.balanceQty, 0);
 
@@ -1768,28 +1784,14 @@ function renderProduccion() {
   document.getElementById('btn-pdf-produccion').disabled = false;
 
   document.getElementById('prod-body').innerHTML = produccionData.map((r, i) => {
-    const subRows = r.lineas.map(l => {
-      const fechaStr = l.deliveryDate || '';
-      return `<tr style="background:var(--surface2)">
-        <td></td>
-        <td style="padding-left:2rem;font-size:11px;color:var(--text-muted);font-family:'DM Mono',monospace">
-          <span style="color:var(--text-faint);margin-right:6px">↳</span>${l.customerOrderNr}
-        </td>
-        <td style="font-size:11px;color:var(--text-faint)">${fechaStr}</td>
-        <td class="num" style="font-size:11px;color:var(--text-muted)">${Math.round(l.balanceQty)}</td>
-        <td></td>
-      </tr>`;
-    }).join('');
-
     return `
-    <tr style="${!r.encontrado ? 'opacity:0.6' : ''};border-top:2px solid var(--border)">
+    <tr style="${!r.encontrado ? 'opacity:0.6' : ''}">
       <td style="text-align:center;font-family:'DM Mono',monospace;font-size:11px;color:var(--text-faint)">${i+1}</td>
       <td class="mono" style="font-weight:500">${r.sku}</td>
-      <td title="${r.style}" style="max-width:300px">${r.style}</td>
+      <td title="${r.style}">${r.style}</td>
       <td class="num" style="font-weight:700;color:var(--accent)">${Math.round(r.balanceQtyTotal)}</td>
       <td style="text-align:center"><span class="badge ${prioridadClass(r)}">${prioridadLabel(r)}</span></td>
-    </tr>
-    ${subRows}`;
+    </tr>`;
   }).join('');
 }
 
@@ -1814,9 +1816,9 @@ function generarPDFProduccion() {
 
   // Resumen
   let y = 30;
-  const alta = produccionData.filter(r => prioridadNivel(r) === 'alta').length;
-  const media = produccionData.filter(r => prioridadNivel(r) === 'media').length;
-  const baja = produccionData.filter(r => prioridadNivel(r) === 'baja').length;
+  const alta = produccionData.filter(r => prioridadNivel(r) === 'urgent').length;
+  const media = produccionData.filter(r => prioridadNivel(r) === 'high').length;
+  const baja = produccionData.filter(r => ['media','baja'].includes(prioridadNivel(r))).length;
   const cols = [
     { label: 'Prioridad alta', value: String(alta) },
     { label: 'Prioridad media', value: String(media) },
@@ -1850,12 +1852,7 @@ function generarPDFProduccion() {
     ]);
     pdfRowMeta.push({ tipo: 'sku', r, skuIdx: i });
 
-    // Subfilas por OC
-    r.lineas.forEach(l => {
-      const fechaStr = l.deliveryDate || '';
-      pdfRows.push(['', `  ↳ ${l.customerOrderNr}`, fechaStr, Math.round(l.balanceQty), '']);
-      pdfRowMeta.push({ tipo: 'oc', skuIdx: i });
-    });
+    // Solo totales, sin subfilas de OC
   });
 
   doc.autoTable({
@@ -1896,8 +1893,9 @@ function generarPDFProduccion() {
         const r = meta.r;
         const n = prioridadNivel(r);
         let color = [42, 122, 59];
-        if (n === 'alta') color = [193, 48, 48];
-        else if (n === 'media') color = [154, 94, 0];
+        if (n === 'urgent') color = [193, 48, 48];
+        else if (n === 'high') color = [154, 94, 0];
+        else if (n === 'media') color = [100, 100, 100];
         else if (n === 'sin_datos') color = [150,150,150];
         doc.setTextColor(...color);
       }
